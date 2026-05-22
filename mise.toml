@@ -1,0 +1,26 @@
+# Project toolchain pins (mise-managed).
+#
+# Run `mise trust` once when you first cd into this repo, then `mise install`
+# to download anything you don't already have.
+#
+# Why pin JDK 21 even though we use the toolchain plugin:
+#   Gradle's own daemon runs on whatever JDK is on PATH. Gradle 8.14 does not
+#   yet understand the JDK 25 class file format, so launching `./gradlew` on
+#   JDK 25 fails with a cryptic "25.0.x" error during configuration. The
+#   `jvmToolchain(21)` declaration only governs *compilation* targets — the
+#   daemon itself needs to be on 21 too.
+#
+# Why pin Gradle 8.14.1:
+#   Matches the wrapper version in gradle/wrapper/gradle-wrapper.properties.
+#   Keeping mise in sync means a stray `gradle` command (without `./gradlew`)
+#   resolves to the same binary the wrapper would download — no "two daemons
+#   competing for the build cache" surprises.
+#
+# Why pin Python 3.13:
+#   Matches the version pin in .github/workflows/client-ha-ci.yml and the
+#   Home Assistant integration's expected runtime.
+
+[tools]
+java = "temurin-21"
+gradle = "8.14.1"
+python = "3.13"

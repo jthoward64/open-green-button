@@ -1,3 +1,5 @@
+import com.google.cloud.tools.jib.gradle.JibTask
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
@@ -6,6 +8,12 @@ plugins {
     alias(libs.plugins.jib)
     alias(libs.plugins.ktlint)
     application
+}
+
+// Jib still calls Task.project at execution time, which the configuration cache forbids.
+// Opt jib tasks out (everything else keeps the cache). https://github.com/GoogleContainerTools/jib/issues/3132
+tasks.withType<JibTask>().configureEach {
+    notCompatibleWithConfigurationCache("Jib is not compatible with the configuration cache")
 }
 
 kotlin {
