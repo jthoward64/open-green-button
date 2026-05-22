@@ -1,0 +1,12 @@
+{
+  "domain": "greenbutton",
+  "name": "Open Green Button",
+  "codeowners": ["@rocketraman"],
+  "config_flow": true,
+  "documentation": "https://github.com/rocketraman/open-green-button",
+  "issue_tracker": "https://github.com/rocketraman/open-green-button/issues",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.0.1"
+}

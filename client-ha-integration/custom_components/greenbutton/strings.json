@@ -1,0 +1,13 @@
+{
+  "config": {
+    "abort": {
+      "not_implemented": "Open Green Button is still in pre-alpha. The config flow will be implemented in Phase 3 of the roadmap."
+    },
+    "step": {
+      "user": {
+        "title": "Open Green Button",
+        "description": "Bridges your utility's Green Button data into Home Assistant."
+      }
+    }
+  }
+}

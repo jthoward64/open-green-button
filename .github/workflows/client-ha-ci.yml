@@ -1,0 +1,54 @@
+name: client-ha-ci
+
+on:
+  pull_request:
+    paths:
+      - 'client-ha-integration/**'
+      - '.github/workflows/client-ha-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'client-ha-integration/**'
+      - '.github/workflows/client-ha-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hassfest
+        uses: home-assistant/actions/hassfest@master
+        with:
+          path: ./client-ha-integration
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HACS Action
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client-ha-integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install ruff
+        run: pip install ruff
+      - name: ruff check
+        run: ruff check custom_components/
+      - name: ruff format
+        run: ruff format --check custom_components/
