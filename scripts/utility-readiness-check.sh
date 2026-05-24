@@ -124,6 +124,17 @@ else
     fail "/ does not contain expected 'Open Green Button' branding"
 fi
 
+# Verify favicons + manifest are reachable (Burlington reviewers may load the page in a browser
+# and notice 404s in devtools; better to catch missing assets here).
+for asset in favicon.ico favicon.svg site.webmanifest logo-horizontal.svg; do
+    code=$(status "$BASE_URL/$asset")
+    if [ "$code" = "200" ]; then
+        pass "/$asset returns 200"
+    else
+        warn "/$asset returns $code (expected 200)"
+    fi
+done
+
 # ------------------------------------------------------------------
 section "Security headers"
 # ------------------------------------------------------------------

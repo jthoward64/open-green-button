@@ -115,6 +115,21 @@ tasks.test {
   useJUnitPlatform()
 }
 
+// Bundle the brand assets (favicons, app icons, manifest, logo) into the runtime classpath
+// under `static/` so Ktor's staticResources can serve them. Sourced from branding/ rather than
+// copied into the resources tree to keep one canonical home for the brand files.
+tasks.processResources {
+  from(rootProject.file("../branding/web")) {
+    into("static")
+  }
+  from(rootProject.file("../branding/logo-horizontal.svg")) {
+    into("static")
+  }
+  from(rootProject.file("../branding/icon.svg")) {
+    into("static")
+  }
+}
+
 jib {
   from {
     image = "eclipse-temurin:21-jre-jammy"

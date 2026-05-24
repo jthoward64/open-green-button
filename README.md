@@ -19,6 +19,15 @@ The hosted server is a **stateless OAuth proxy**: utilities require a stable pub
 
 The hosted server holds **no per-user durable state**. Per-utility OAuth client credentials are configured globally; every other piece of state (your refresh token, your usage data) lives only on your Home Assistant instance.
 
+## Support
+
+Open Green Button is free to use. If it saves you time or you'd like to help keep it maintained and hosted (there's a small Fly.io bill and ongoing time spent adding new utilities and keeping up with Home Assistant changes), donations are welcome.
+
+**Suggested: $5 / month** — roughly enough to cover hosting plus a contribution toward maintenance time. Anything above that funds new utility integrations.
+
+- [Sponsor on GitHub](https://github.com/sponsors/rocketraman)
+- [Buy Me a Coffee](https://www.buymeacoffee.com/rocketraman)
+
 ## License
 
 [MIT](LICENSE)

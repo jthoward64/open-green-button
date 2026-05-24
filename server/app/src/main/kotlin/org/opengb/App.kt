@@ -25,6 +25,7 @@ import org.opengb.oauth.OAuthClient
 import org.opengb.oauth.StateStore
 import org.opengb.observability.installAccessLog
 import org.opengb.proxy.TokenCrypto
+import org.opengb.routes.installCanonicalHost
 import org.opengb.routes.installClaim
 import org.opengb.routes.installConnect
 import org.opengb.routes.installLanding
@@ -135,6 +136,12 @@ internal fun Application.appModule(deps: AppDeps) {
   // ThreadContext propagation (so any non-access log emitted *during* the request also
   // inherits http.request.id and trace.id). See [installAccessLog] for details.
   installAccessLog()
+  // Canonical-host redirect (e.g. www.* → naked). Runs in Plugins phase so it pre-empts route
+  // matching with a 301. Doesn't fire for any host not in deps.config.server.redirectFrom.
+  installCanonicalHost(
+    canonicalHost = deps.config.server.canonicalHost,
+    redirectFrom = deps.config.server.redirectFrom,
+  )
   install(ContentNegotiation) {
     json(
       Json {

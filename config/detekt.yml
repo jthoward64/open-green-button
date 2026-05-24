@@ -5,8 +5,10 @@
 
 complexity:
   TooManyFunctions:
-    # 11 (default) is too low for typical Ktor route / DI module files.
+    # 11 (default) is too low for typical Ktor route / DI module files. Same goes for files
+    # built out of many small kotlinx.html section helpers (the landing page).
     thresholdInClasses: 15
+    thresholdInFiles: 20
     ignoreDeprecated: true
 
 exceptions:
