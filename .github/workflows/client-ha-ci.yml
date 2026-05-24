@@ -15,6 +15,9 @@ permissions:
   contents: read
 
 jobs:
+  # HACS validation runs in its own workflow (hacs-validate.yml) — see that file for the
+  # scheduled / dispatch trigger that catches upstream rule changes.
+
   hassfest:
     runs-on: ubuntu-latest
     steps:
@@ -23,18 +26,6 @@ jobs:
         uses: home-assistant/actions/hassfest@master
         with:
           path: ./client-ha-integration
-
-  hacs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: HACS Action
-        uses: hacs/action@main
-        with:
-          category: integration
-          ignore: brands
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lint:
     runs-on: ubuntu-latest
