@@ -27,9 +27,6 @@ import org.opengb.proxy.TokenCrypto
 import org.opengb.utility.TokenAuthStyle
 import org.opengb.utility.UtilityProfile
 import java.util.Base64
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * End-to-end test of the OAuth + claim code flow with a mock utility:
@@ -47,22 +44,21 @@ val OAuthFlowEndToEndTest by testSuite {
         runE2E { client, ctx ->
             // 1. Start the OAuth flow
             val startResp = client.get("/connect/mock/start")
-            assertEquals(HttpStatusCode.Found, startResp.status, "expected 302")
-            val location = startResp.headers[HttpHeaders.Location]
-            assertNotNull(location, "redirect Location must be present")
-            assertTrue(
-                location.startsWith("https://utility.mock/authorize"),
-                "unexpected redirect target: $location",
-            )
+            assert(startResp.status == HttpStatusCode.Found) { "expected 302" }
+            val location =
+                startResp.headers[HttpHeaders.Location]
+                    ?: error("redirect Location must be present")
+            assert(location.startsWith("https://utility.mock/authorize")) {
+                "unexpected redirect target: $location"
+            }
 
             val redirectQuery = parseQueryString(location.substringAfter('?', ""))
-            val state = redirectQuery["state"]
-            assertNotNull(state, "state must be in the redirect URL")
-            assertEquals(ctx.utility.clientId, redirectQuery["client_id"])
-            assertEquals(ctx.utility.defaultScope, redirectQuery["scope"])
-            assertEquals(
-                "${ctx.publicBaseUrl}/connect/${ctx.utility.id}/callback",
-                redirectQuery["redirect_uri"],
+            val state = redirectQuery["state"] ?: error("state must be in the redirect URL")
+            assert(redirectQuery["client_id"] == ctx.utility.clientId)
+            assert(redirectQuery["scope"] == ctx.utility.defaultScope)
+            assert(
+                redirectQuery["redirect_uri"] ==
+                    "${ctx.publicBaseUrl}/connect/${ctx.utility.id}/callback",
             )
 
             // 2. Simulate utility consent: hit the callback as the utility would
@@ -71,30 +67,29 @@ val OAuthFlowEndToEndTest by testSuite {
                     parameter("code", "auth_code_xyz")
                     parameter("state", state)
                 }
-            assertEquals(HttpStatusCode.OK, callbackResp.status)
+            assert(callbackResp.status == HttpStatusCode.OK)
             val html = callbackResp.bodyAsText()
-            val claimCode = extractClaimCode(html)
-            assertNotNull(claimCode, "claim code must appear in the callback HTML")
-            assertTrue(claimCode.startsWith("gb_live_"), "claim code: $claimCode")
+            val claimCode = extractClaimCode(html) ?: error("claim code must appear in the callback HTML")
+            assert(claimCode.startsWith("gb_live_")) { "claim code: $claimCode" }
 
             // 3. Redeem the claim code
             val redeemResp = client.post("/claim/$claimCode")
-            assertEquals(HttpStatusCode.OK, redeemResp.status)
+            assert(redeemResp.status == HttpStatusCode.OK)
             val redeemBody = redeemResp.bodyAsText()
-            assertTrue(redeemBody.contains("encryptedRefreshBlob"))
-            assertTrue(redeemBody.contains("proxyToken"))
-            assertTrue(redeemBody.contains("\"utilityId\":\"mock\""))
+            assert(redeemBody.contains("encryptedRefreshBlob"))
+            assert(redeemBody.contains("proxyToken"))
+            assert(redeemBody.contains("\"utilityId\":\"mock\""))
 
             // Sanity: the blob actually decrypts to the refresh token the mock utility issued.
             val crypto = TokenCrypto(ctx.config.crypto)
             val blob = crypto.decrypt(extractField(redeemBody, "encryptedRefreshBlob"))
-            assertEquals("rt_mock_value", blob.refreshToken)
-            assertEquals("mock", blob.utilityId)
-            assertEquals(crypto.deriveProxyToken(blob), extractField(redeemBody, "proxyToken"))
+            assert(blob.refreshToken == "rt_mock_value")
+            assert(blob.utilityId == "mock")
+            assert(extractField(redeemBody, "proxyToken") == crypto.deriveProxyToken(blob))
 
             // 4. Single-use: redeem again → 410 Gone
             val again = client.post("/claim/$claimCode")
-            assertEquals(HttpStatusCode.Gone, again.status)
+            assert(again.status == HttpStatusCode.Gone)
         }
     }
 
@@ -105,8 +100,8 @@ val OAuthFlowEndToEndTest by testSuite {
                     parameter("code", "auth_code_xyz")
                     parameter("state", "totally-bogus-state")
                 }
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
-            assertTrue(resp.bodyAsText().contains("unknown", ignoreCase = true))
+            assert(resp.status == HttpStatusCode.BadRequest)
+            assert(resp.bodyAsText().contains("unknown", ignoreCase = true))
         }
     }
 
@@ -117,7 +112,7 @@ val OAuthFlowEndToEndTest by testSuite {
                     parameter("code", "x")
                     parameter("state", "y")
                 }
-            assertEquals(HttpStatusCode.NotFound, resp.status)
+            assert(resp.status == HttpStatusCode.NotFound)
         }
     }
 
@@ -135,7 +130,7 @@ val OAuthFlowEndToEndTest by testSuite {
                 }
             // 'other' is also not registered in this test, so this will 404. Adjust the registry
             // to add a second utility if we want to specifically exercise the cross-utility check.
-            assertEquals(HttpStatusCode.NotFound, resp.status)
+            assert(resp.status == HttpStatusCode.NotFound)
             // The state is still consumable for /mock, because /other/callback rejected before
             // attempting to consume:
             val ok =
@@ -143,14 +138,14 @@ val OAuthFlowEndToEndTest by testSuite {
                     parameter("code", "c")
                     parameter("state", state)
                 }
-            assertEquals(HttpStatusCode.OK, ok.status)
+            assert(ok.status == HttpStatusCode.OK)
         }
     }
 
     test("redeem rejects an unknown claim code") {
         runE2E { client, _ ->
             val resp = client.post("/claim/gb_live_nonexistent")
-            assertEquals(HttpStatusCode.Gone, resp.status)
+            assert(resp.status == HttpStatusCode.Gone)
         }
     }
 }

@@ -4,10 +4,6 @@ import com.sksamuel.hoplite.Masked
 import de.infix.testBalloon.framework.core.testSuite
 import org.opengb.config.CryptoConfig
 import java.util.Base64
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
-import kotlin.test.assertTrue
 import kotlin.test.fail
 
 val TokenCryptoTest by testSuite {
@@ -24,14 +20,14 @@ val TokenCryptoTest by testSuite {
             )
         val ciphertext = crypto.encrypt(original)
         val recovered = crypto.decrypt(ciphertext)
-        assertEquals(original, recovered)
+        assert(recovered == original)
     }
 
     test("ciphertext is non-deterministic across encryptions of the same blob") {
         val blob = sampleBlob()
         val a = crypto.encrypt(blob)
         val b = crypto.encrypt(blob)
-        assertNotEquals(a, b, "GCM IV must be random per-encryption")
+        assert(a != b) { "GCM IV must be random per-encryption" }
     }
 
     test("decrypt rejects a tampered ciphertext") {
@@ -59,7 +55,7 @@ val TokenCryptoTest by testSuite {
             crypto.decrypt(rewrapped)
             fail("decrypt should reject unknown version")
         } catch (e: BlobDecryptionException) {
-            assertTrue(e.message?.contains("version") == true)
+            assert(e.message?.contains("version") == true)
         }
     }
 
@@ -67,27 +63,27 @@ val TokenCryptoTest by testSuite {
         val blob = sampleBlob()
         val a = crypto.deriveProxyToken(blob)
         val b = crypto.deriveProxyToken(blob)
-        assertEquals(a, b)
+        assert(a == b)
     }
 
     test("deriveProxyToken changes when the refresh token changes") {
         val a = crypto.deriveProxyToken(sampleBlob(refreshToken = "rt_one"))
         val b = crypto.deriveProxyToken(sampleBlob(refreshToken = "rt_two"))
-        assertNotEquals(a, b)
+        assert(a != b)
     }
 
     test("deriveProxyToken changes when the utility id changes") {
         val a = crypto.deriveProxyToken(sampleBlob(utilityId = "u_one"))
         val b = crypto.deriveProxyToken(sampleBlob(utilityId = "u_two"))
-        assertNotEquals(a, b)
+        assert(a != b)
     }
 
     test("verifyProxyToken accepts the legitimate token and rejects others") {
         val blob = sampleBlob()
         val good = crypto.deriveProxyToken(blob)
-        assertTrue(crypto.verifyProxyToken(blob, good))
-        assertFalse(crypto.verifyProxyToken(blob, good + "x"))
-        assertFalse(crypto.verifyProxyToken(blob, ""))
+        assert(crypto.verifyProxyToken(blob, good))
+        assert(!crypto.verifyProxyToken(blob, good + "x"))
+        assert(!crypto.verifyProxyToken(blob, ""))
     }
 
     test("AES key of wrong size is rejected") {
@@ -101,7 +97,7 @@ val TokenCryptoTest by testSuite {
             )
             fail("16-byte AES key should be rejected")
         } catch (e: IllegalArgumentException) {
-            assertTrue(e.message?.contains("256 bits") == true)
+            assert(e.message?.contains("256 bits") == true)
         }
     }
 }

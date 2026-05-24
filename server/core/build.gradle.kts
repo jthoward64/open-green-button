@@ -27,15 +27,7 @@ kotlin {
 }
 
 powerAssert {
-    functions =
-        listOf(
-            "kotlin.assert",
-            "kotlin.test.assertTrue",
-            "kotlin.test.assertEquals",
-            "kotlin.test.assertNotNull",
-            "kotlin.test.assertNull",
-            "kotlin.test.assertContains",
-        )
+    functions = listOf("kotlin.assert")
     includedSourceSets = listOf("test")
 }
 

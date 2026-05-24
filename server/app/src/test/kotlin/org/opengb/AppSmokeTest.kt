@@ -16,16 +16,14 @@ import org.opengb.config.LandingMode
 import org.opengb.config.ServerConfig
 import org.opengb.config.StateConfig
 import java.util.Base64
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 val AppSmokeTest by testSuite {
     test("/health returns ok") {
         testApplication {
             application { appModule(buildAppDeps(testConfig(), inertHttp())) }
             val response = client.get("/health")
-            assertEquals(HttpStatusCode.OK, response.status)
-            assertEquals("ok", response.bodyAsText())
+            assert(response.status == HttpStatusCode.OK)
+            assert(response.bodyAsText() == "ok")
         }
     }
 
@@ -33,9 +31,9 @@ val AppSmokeTest by testSuite {
         testApplication {
             application { appModule(buildAppDeps(testConfig(), inertHttp())) }
             val response = client.get("/")
-            assertEquals(HttpStatusCode.OK, response.status)
+            assert(response.status == HttpStatusCode.OK)
             val body = response.bodyAsText()
-            assertTrue(body.contains("Open Green Button"))
+            assert(body.contains("Open Green Button"))
         }
     }
 
@@ -81,8 +79,7 @@ private fun assertContainsIgnoreCase(
     haystack: String,
     needle: String,
 ) {
-    assertTrue(
-        haystack.contains(needle, ignoreCase = true),
-        "expected to contain '$needle': $haystack",
-    )
+    assert(haystack.contains(needle, ignoreCase = true)) {
+        "expected to contain '$needle': $haystack"
+    }
 }
