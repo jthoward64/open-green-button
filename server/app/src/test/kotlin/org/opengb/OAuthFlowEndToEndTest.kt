@@ -20,7 +20,6 @@ import kotlinx.coroutines.runBlocking
 import org.opengb.config.AppConfig
 import org.opengb.config.CryptoConfig
 import org.opengb.config.LandingConfig
-import org.opengb.config.LandingMode
 import org.opengb.config.ServerConfig
 import org.opengb.config.StateConfig
 import org.opengb.proxy.TokenCrypto
@@ -260,7 +259,7 @@ private fun runE2E(
             ),
         ),
       state = StateConfig(),
-      landing = LandingConfig(mode = LandingMode.LIVE),
+      landing = LandingConfig(),
       utilities = listOf(utility),
     )
   val deps = buildAppDeps(config, mockHttp)

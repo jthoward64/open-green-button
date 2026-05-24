@@ -45,11 +45,8 @@ data class StateConfig(
 )
 
 data class LandingConfig(
-  val mode: LandingMode = LandingMode.COMING_SOON,
   val tagline: String = "Open Green Button — bridge utility energy data into Home Assistant.",
 )
-
-enum class LandingMode { COMING_SOON, LIVE }
 
 fun loadConfig(): AppConfig =
   ConfigLoaderBuilder.default()

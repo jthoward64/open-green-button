@@ -32,7 +32,6 @@ import kotlinx.html.title
 import kotlinx.html.ul
 import kotlinx.html.unsafe
 import org.opengb.config.AppConfig
-import org.opengb.config.LandingMode
 
 /**
  * Static brand assets (favicons, manifest, logo) are copied into the classpath at `static/` by
@@ -70,10 +69,12 @@ private fun HTML.landingPage(config: AppConfig) {
   head { pageHead(config) }
   body {
     siteHeader()
-    when (config.landing.mode) {
-      LandingMode.COMING_SOON -> comingSoonBody()
-      LandingMode.LIVE -> liveBody(config)
-    }
+    hero()
+    howItWorks()
+    privacy()
+    supportedUtilities(config)
+    getStarted()
+    support()
     siteFooter()
   }
 }
@@ -131,29 +132,6 @@ private fun BODY.siteHeader() {
       }
     }
   }
-}
-
-private fun BODY.comingSoonBody() {
-  div("hero") {
-    div("container") {
-      h1 { +"Coming soon" }
-      p("lead") {
-        +"The Open Green Button service is under active development. "
-        +"Check back shortly, or follow progress on "
-        a(href = "https://github.com/rocketraman/open-green-button") { +"GitHub" }
-        +"."
-      }
-    }
-  }
-}
-
-private fun BODY.liveBody(config: AppConfig) {
-  hero()
-  howItWorks()
-  privacy()
-  supportedUtilities(config)
-  getStarted()
-  support()
 }
 
 private fun BODY.hero() {

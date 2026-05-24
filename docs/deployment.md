@@ -55,10 +55,6 @@ fly secrets set \
 
 The server's `utilities.conf` reads these via Hoplite env substitution.
 
-## Going live
-
-Set `OPENGB_LANDING_MODE=LIVE` to switch the landing page from the "coming soon" stub to the privacy-story copy.
-
 ## Continuous deploy from GitHub Actions
 
 [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `master` that touches `server/**`. It builds, tests, pushes the Jib image to `registry.fly.io/open-green-button:<sha>`, and runs `flyctl deploy` against that immutable SHA-tagged image.

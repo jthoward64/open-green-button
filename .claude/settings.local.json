@@ -6,7 +6,10 @@
       "Bash(xargs -r kill -TERM)",
       "Bash(awk '$4 ~ /:18080$/')",
       "Bash(curl -sf http://127.0.0.1:18080/health)",
-      "Bash(mise install *)"
+      "Bash(curl -sf http://127.0.0.1:18080/health)"
+      "Bash(./gradlew :app:compileKotlin :app:compileTestKotlin --info)",
+      "Bash(mise install *)",
+      "Bash(mise env *)"
     ]
   }
 }
