@@ -33,6 +33,9 @@ jobs:
       - name: ktlint
         run: ./gradlew ktlintCheck
 
+      - name: detekt
+        run: ./gradlew detekt --stacktrace
+
       - name: Build
         run: ./gradlew build --stacktrace
 
@@ -47,3 +50,10 @@ jobs:
           path: |
             server/**/build/reports/tests/
             server/**/build/test-results/
+
+      - name: Upload detekt report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-detekt-reports
+          path: server/**/build/reports/detekt/

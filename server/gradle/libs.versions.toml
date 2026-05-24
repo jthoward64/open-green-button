@@ -14,7 +14,7 @@ bootable = "2.0.2"
 testBalloon = "1.0.0-K2.3.0"
 powerAssert = "2.3.0"
 jib = "3.4.5"
-detekt = "1.23.7"
+detekt = "1.23.8"
 ktlint = "12.1.2"
 
 [libraries]

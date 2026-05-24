@@ -161,6 +161,10 @@ private data class TestCtx(
     val utility: UtilityProfile,
 )
 
+// Test fixture setup is intentionally inlined here so the wiring is visible at a glance — the
+// utility profile, mock OAuth response, AppConfig, and test client are all configured together.
+// Splitting into helpers obscures the relationship between them.
+@Suppress("LongMethod")
 private fun runE2E(block: suspend (io.ktor.client.HttpClient, TestCtx) -> Unit) {
     val publicBaseUrl = "http://test.local"
     val utility =
@@ -240,14 +244,4 @@ private fun extractField(
 ): String {
     val regex = Regex("\"$field\"\\s*:\\s*\"([^\"]*)\"")
     return regex.find(json)?.groupValues?.get(1) ?: error("field '$field' not found in $json")
-}
-
-private fun assertContainsIgnoreCase(
-    haystack: String,
-    needle: String,
-) {
-    assertTrue(
-        haystack.contains(needle, ignoreCase = true),
-        "expected to contain '$needle': $haystack",
-    )
 }

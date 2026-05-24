@@ -1,4 +1,6 @@
 import com.google.cloud.tools.jib.gradle.JibTask
+import io.gitlab.arturbosch.detekt.Detekt
+import io.gitlab.arturbosch.detekt.DetektCreateBaselineTask
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -7,6 +9,7 @@ plugins {
     alias(libs.plugins.testBalloon)
     alias(libs.plugins.jib)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
     application
 }
 
@@ -15,6 +18,15 @@ plugins {
 tasks.withType<JibTask>().configureEach {
     notCompatibleWithConfigurationCache("Jib is not compatible with the configuration cache")
 }
+
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom(rootProject.file("../config/detekt.yml"))
+}
+
+tasks.withType<Detekt>().configureEach { jvmTarget = "21" }
+tasks.withType<DetektCreateBaselineTask>().configureEach { jvmTarget = "21" }
 
 kotlin {
     jvmToolchain(21)

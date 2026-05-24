@@ -1,0 +1,46 @@
+# Detekt overrides on top of the default ruleset. Anything not listed here uses detekt's
+# defaults from io.gitlab.arturbosch.detekt.api.internal.DefaultRuleSetProvider.
+#
+# Pattern lifted from domains-registry-gateway/config/detekt.yml, adapted for open-green-button.
+
+complexity:
+  TooManyFunctions:
+    # 11 (default) is too low for typical Ktor route / DI module files.
+    thresholdInClasses: 15
+    ignoreDeprecated: true
+
+exceptions:
+  InstanceOfCheckForException:
+    # Allowed — we do catch (e: javax.crypto.AEADBadTagException) etc. and wrap, which is a
+    # legitimate instance check pattern, not the misuse this rule was designed for.
+    active: false
+
+ktlint:
+  Indentation:
+    indentSize: 2
+
+style:
+  MaxLineLength:
+    # Aligned with ktlint's default of 120 (set in .editorconfig). ktlint enforces; this is a
+    # safety net for files ktlint somehow misses.
+    active: true
+    maxLineLength: 120
+    excludePackageStatements: true
+    excludeImportStatements: true
+    excludeCommentStatements: true
+  ReturnCount:
+    # Multiple early-returns are idiomatic in Ktor route handlers (validate-and-bail patterns).
+    excludeGuardClauses: true
+    max: 5
+  MagicNumber:
+    # Crypto code is full of legitimate byte/bit-count literals (12-byte GCM IV, 32-byte AES key,
+    # 16-byte HMAC, etc.). They're not really "magic" — they're protocol constants. Permit the
+    # common power-of-2 sizes and a few round timing/limit values; defer to code review for
+    # the rest.
+    ignoreNumbers: ['-1', '0', '1', '2', '4', '7', '8', '12', '14', '16', '32', '64', '100', '128', '256', '1000', '1024']
+    ignoreHashCodeFunction: true
+    ignoreEnums: true
+    ignoreNamedArgument: true
+    ignoreLocalVariableDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+  NoTabs: true

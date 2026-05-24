@@ -12,6 +12,7 @@ import io.ktor.http.ParametersBuilder
 import io.ktor.http.parameters
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import org.opengb.utility.TokenAuthStyle
 import org.opengb.utility.UtilityProfile
@@ -114,7 +115,7 @@ class OAuthClient(private val http: HttpClient, private val json: Json = DEFAULT
         }
         return try {
             json.decodeFromString(TokenResponse.serializer(), bodyText)
-        } catch (e: Exception) {
+        } catch (e: SerializationException) {
             throw OAuthException(
                 "Utility '${utility.id}' returned a malformed token response: $bodyText",
                 cause = e,

@@ -146,14 +146,7 @@ internal fun Application.appModule(deps: AppDeps) {
     }
     installLiveness()
     installLanding(deps.config)
-    installConnect(
-        config = deps.config,
-        registry = deps.registry,
-        stateStore = deps.stateStore,
-        claimStore = deps.claimStore,
-        crypto = deps.crypto,
-        oauth = deps.oauth,
-    )
+    installConnect(deps)
     installClaim(deps.claimStore)
     installNotify(deps.registry)
 }

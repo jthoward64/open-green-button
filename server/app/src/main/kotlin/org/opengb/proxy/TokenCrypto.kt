@@ -57,6 +57,10 @@ class TokenCrypto(
         return BASE64_URL_NO_PAD.encodeToString(out)
     }
 
+    // Each throw distinguishes a different failure mode the caller wants to log and metric on
+    // (malformed base64, truncated payload, wrong version byte, authentication failure).
+    // Collapsing into a single exception type would erase that signal.
+    @Suppress("ThrowsCount")
     fun decrypt(blob: String): RefreshBlob {
         val bytes =
             try {

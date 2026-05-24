@@ -4,11 +4,13 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.html.respondHtml
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import kotlinx.html.HTML
 import kotlinx.html.body
 import kotlinx.html.code
 import kotlinx.html.div
@@ -19,17 +21,13 @@ import kotlinx.html.p
 import kotlinx.html.style
 import kotlinx.html.title
 import kotlinx.html.unsafe
-import org.opengb.config.AppConfig
+import org.opengb.AppDeps
 import org.opengb.oauth.ClaimRecord
-import org.opengb.oauth.ClaimStore
-import org.opengb.oauth.OAuthClient
 import org.opengb.oauth.OAuthException
 import org.opengb.oauth.PendingOAuth
-import org.opengb.oauth.StateStore
 import org.opengb.proxy.RefreshBlob
-import org.opengb.proxy.TokenCrypto
 import org.opengb.utility.UnknownUtilityException
-import org.opengb.utility.UtilityRegistry
+import org.opengb.utility.UtilityProfile
 
 /**
  * Routes:
@@ -39,133 +37,117 @@ import org.opengb.utility.UtilityRegistry
  *    refresh blob, stashes it behind a one-time claim code, and renders an HTML page showing the
  *    code to the user.
  */
-fun Application.installConnect(
-    config: AppConfig,
-    registry: UtilityRegistry,
-    stateStore: StateStore,
-    claimStore: ClaimStore,
-    crypto: TokenCrypto,
-    oauth: OAuthClient,
-) {
+fun Application.installConnect(deps: AppDeps) {
     routing {
-        get("/connect/{utility}/start") {
-            val utilityId = call.parameters["utility"].orEmpty()
-            val utility =
-                try {
-                    registry.require(utilityId)
-                } catch (_: UnknownUtilityException) {
-                    call.respondText(
-                        text = "Unknown utility '$utilityId'.",
-                        contentType = ContentType.Text.Plain,
-                        status = HttpStatusCode.NotFound,
-                    )
-                    return@get
-                }
-
-            val state =
-                stateStore.create(
-                    PendingOAuth(
-                        utilityId = utility.id,
-                        haNonce = call.request.queryParameters["ha_nonce"],
-                    ),
-                )
-            val redirectUri = "${config.server.publicBaseUrl}/connect/${utility.id}/callback"
-
-            val url =
-                URLBuilder(utility.authorizeUrl).apply {
-                    parameters.append("response_type", "code")
-                    parameters.append("client_id", utility.clientId)
-                    parameters.append("redirect_uri", redirectUri)
-                    parameters.append("scope", utility.defaultScope)
-                    parameters.append("state", state)
-                }.buildString()
-
-            call.respondRedirect(url, permanent = false)
-        }
-
-        get("/connect/{utility}/callback") {
-            val utilityId = call.parameters["utility"].orEmpty()
-            val utility =
-                try {
-                    registry.require(utilityId)
-                } catch (_: UnknownUtilityException) {
-                    call.respondText(
-                        "Unknown utility '$utilityId'.",
-                        ContentType.Text.Plain,
-                        HttpStatusCode.NotFound,
-                    )
-                    return@get
-                }
-
-            val state = call.request.queryParameters["state"]
-            val code = call.request.queryParameters["code"]
-            val error = call.request.queryParameters["error"]
-
-            if (error != null) {
-                call.respondCallbackError("Utility returned error: $error")
-                return@get
-            }
-            if (state.isNullOrBlank() || code.isNullOrBlank()) {
-                call.respondCallbackError("Missing 'state' or 'code' query parameter.")
-                return@get
-            }
-
-            val pending = stateStore.consume(state)
-            if (pending == null) {
-                call.respondCallbackError("OAuth state is unknown, expired, or already used.")
-                return@get
-            }
-            if (pending.utilityId != utility.id) {
-                call.respondCallbackError("OAuth state does not match this utility.")
-                return@get
-            }
-
-            val redirectUri = "${config.server.publicBaseUrl}/connect/${utility.id}/callback"
-            val tokens =
-                try {
-                    oauth.exchangeCode(utility, code, redirectUri)
-                } catch (e: OAuthException) {
-                    call.application.environment.log.warn(
-                        "Token exchange failed for utility=${utility.id}: ${e.message}",
-                    )
-                    call.respondCallbackError("Could not exchange authorization code with utility.")
-                    return@get
-                }
-
-            val refreshToken = tokens.refreshToken
-            if (refreshToken.isNullOrBlank()) {
-                call.respondCallbackError("Utility did not issue a refresh token.")
-                return@get
-            }
-
-            val refreshBlob =
-                RefreshBlob(
-                    utilityId = utility.id,
-                    refreshToken = refreshToken,
-                    subscriptionUri = tokens.resourceUri,
-                    authorizationUri = tokens.authorizationUri,
-                    scope = tokens.scope ?: utility.defaultScope,
-                )
-            val encrypted = crypto.encrypt(refreshBlob)
-            val proxyToken = crypto.deriveProxyToken(refreshBlob)
-
-            val claimCode =
-                claimStore.create(
-                    ClaimRecord(
-                        utilityId = utility.id,
-                        encryptedRefreshBlob = encrypted,
-                        proxyToken = proxyToken,
-                        subscriptionUri = refreshBlob.subscriptionUri,
-                        scope = refreshBlob.scope,
-                    ),
-                )
-
-            call.respondHtml { renderClaimPage(utilityDisplayName = utility.displayName, claimCode = claimCode) }
-        }
+        get("/connect/{utility}/start") { handleStart(deps) }
+        get("/connect/{utility}/callback") { handleCallback(deps) }
     }
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondCallbackError(message: String) {
+private suspend fun io.ktor.server.routing.RoutingContext.handleStart(deps: AppDeps) {
+    val utility = resolveUtility(deps) ?: return
+    val state =
+        deps.stateStore.create(
+            PendingOAuth(
+                utilityId = utility.id,
+                haNonce = call.request.queryParameters["ha_nonce"],
+            ),
+        )
+    val redirectUri = "${deps.config.server.publicBaseUrl}/connect/${utility.id}/callback"
+    val url =
+        URLBuilder(utility.authorizeUrl).apply {
+            parameters.append("response_type", "code")
+            parameters.append("client_id", utility.clientId)
+            parameters.append("redirect_uri", redirectUri)
+            parameters.append("scope", utility.defaultScope)
+            parameters.append("state", state)
+        }.buildString()
+    call.respondRedirect(url, permanent = false)
+}
+
+private suspend fun io.ktor.server.routing.RoutingContext.handleCallback(deps: AppDeps) {
+    val utility = resolveUtility(deps) ?: return
+    val state = call.request.queryParameters["state"]
+    val code = call.request.queryParameters["code"]
+    val error = call.request.queryParameters["error"]
+
+    if (error != null) {
+        call.respondCallbackError("Utility returned error: $error")
+        return
+    }
+    if (state.isNullOrBlank() || code.isNullOrBlank()) {
+        call.respondCallbackError("Missing 'state' or 'code' query parameter.")
+        return
+    }
+
+    val pending = deps.stateStore.consume(state)
+    if (pending == null) {
+        call.respondCallbackError("OAuth state is unknown, expired, or already used.")
+        return
+    }
+    if (pending.utilityId != utility.id) {
+        call.respondCallbackError("OAuth state does not match this utility.")
+        return
+    }
+
+    val refreshBlob = exchangeAndBuildBlob(deps, utility, code) ?: return
+    val encrypted = deps.crypto.encrypt(refreshBlob)
+    val proxyToken = deps.crypto.deriveProxyToken(refreshBlob)
+    val claimCode =
+        deps.claimStore.create(
+            ClaimRecord(
+                utilityId = utility.id,
+                encryptedRefreshBlob = encrypted,
+                proxyToken = proxyToken,
+                subscriptionUri = refreshBlob.subscriptionUri,
+                scope = refreshBlob.scope,
+            ),
+        )
+    call.respondHtml { renderClaimPage(utilityDisplayName = utility.displayName, claimCode = claimCode) }
+}
+
+/** 404s on unknown utility and returns null so the caller can `return`. */
+private suspend fun io.ktor.server.routing.RoutingContext.resolveUtility(deps: AppDeps): UtilityProfile? {
+    val utilityId = call.parameters["utility"].orEmpty()
+    return try {
+        deps.registry.require(utilityId)
+    } catch (_: UnknownUtilityException) {
+        call.respondText("Unknown utility '$utilityId'.", ContentType.Text.Plain, HttpStatusCode.NotFound)
+        null
+    }
+}
+
+private suspend fun io.ktor.server.routing.RoutingContext.exchangeAndBuildBlob(
+    deps: AppDeps,
+    utility: UtilityProfile,
+    code: String,
+): RefreshBlob? {
+    val redirectUri = "${deps.config.server.publicBaseUrl}/connect/${utility.id}/callback"
+    val tokens =
+        try {
+            deps.oauth.exchangeCode(utility, code, redirectUri)
+        } catch (e: OAuthException) {
+            call.application.environment.log.warn(
+                "Token exchange failed for utility=${utility.id}: ${e.message}",
+            )
+            call.respondCallbackError("Could not exchange authorization code with utility.")
+            return null
+        }
+    val refreshToken = tokens.refreshToken
+    if (refreshToken.isNullOrBlank()) {
+        call.respondCallbackError("Utility did not issue a refresh token.")
+        return null
+    }
+    return RefreshBlob(
+        utilityId = utility.id,
+        refreshToken = refreshToken,
+        subscriptionUri = tokens.resourceUri,
+        authorizationUri = tokens.authorizationUri,
+        scope = tokens.scope ?: utility.defaultScope,
+    )
+}
+
+private suspend fun ApplicationCall.respondCallbackError(message: String) {
     respondHtml(HttpStatusCode.BadRequest) {
         head {
             title { +"Authorization failed" }
@@ -180,7 +162,7 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondCallbackEr
     }
 }
 
-private fun kotlinx.html.HTML.renderClaimPage(
+private fun HTML.renderClaimPage(
     utilityDisplayName: String,
     claimCode: String,
 ) {
