@@ -1,0 +1,12 @@
+# Python venv config for the HA integration. Auto-created and auto-activated when you cd in
+# (mise traverses upward, so the root mise.toml's python = "3.13" still applies).
+#
+# Setup from a clean checkout:
+#   mise trust            # one-time, accepts both this file and the root mise.toml
+#   mise install          # ensures python 3.13 is present
+#   pip install -r requirements_test.txt
+#
+# The venv lives at client-ha-integration/.venv (ignored by .gitignore).
+
+[env]
+_.python.venv = { path = ".venv", create = true }
