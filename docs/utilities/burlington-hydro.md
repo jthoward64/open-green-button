@@ -6,8 +6,8 @@ Burlington Hydro is the first targeted utility for Open Green Button.
 
 URLs to supply to Burlington's Green Button Support team:
 
-- **Redirect URI**: `https://greenbutton.<your-domain>/connect/burlington_hydro/callback`
-- **NotificationURI**: `https://greenbutton.<your-domain>/notify/burlington_hydro`
+- **Redirect URI**: `https://api.opengreenbutton.org/connect/burlington_hydro/callback`
+- **NotificationURI**: `https://api.opengreenbutton.org/notify/burlington_hydro`
 - **App name**: Open Green Button
 - **Contact**: see project repository
 - **Logo / branding**: see `branding/` in repo root
