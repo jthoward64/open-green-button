@@ -1,5 +1,7 @@
 package org.opengb.utility
 
+import kotlinx.serialization.Serializable
+
 /**
  * In-memory lookup over the configured utilities. Loaded once at startup from `utilities.conf`
  * via Hoplite; not mutable at runtime (server restart picks up changes).
@@ -23,6 +25,7 @@ class UtilityRegistry(profiles: List<UtilityProfile>) {
   fun summary(): List<UtilitySummary> = byId.values.map { UtilitySummary(it.id, it.displayName) }
 }
 
+@Serializable
 data class UtilitySummary(val id: String, val displayName: String)
 
 class UnknownUtilityException(val utilityId: String) :

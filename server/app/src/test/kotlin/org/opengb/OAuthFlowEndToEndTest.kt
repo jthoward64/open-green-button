@@ -149,6 +149,23 @@ val OAuthFlowEndToEndTest by testSuite {
     }
   }
 
+  // /utilities is what the HA config flow calls to populate its utility picker. Returns the
+  // static list from utilities.conf — id + displayName, no secrets. Exercised here because
+  // runE2E already wires up the mock utility into the registry.
+  test("/utilities returns the configured list") {
+    runE2E { client, ctx ->
+      val resp = client.get("/utilities")
+      assert(resp.status == HttpStatusCode.OK)
+      val body = resp.bodyAsText()
+      assert(body.contains("\"id\":\"${ctx.utility.id}\""))
+      assert(body.contains("\"displayName\":\"${ctx.utility.displayName}\""))
+      // No secrets leaked.
+      assert(!body.contains(ctx.utility.clientId))
+      assert(!body.contains(ctx.utility.clientSecret.value))
+      assert(!body.contains(ctx.utility.tokenUrl))
+    }
+  }
+
   // Legacy / FB_14 auth: utility doesn't echo the granted scope in the token response (because
   // scope was pre-negotiated at registration). The persisted blob must fall back to the
   // requested scope so downstream code always has something to read.

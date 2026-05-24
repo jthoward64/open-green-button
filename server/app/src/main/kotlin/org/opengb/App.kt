@@ -31,6 +31,7 @@ import org.opengb.routes.installConnect
 import org.opengb.routes.installLanding
 import org.opengb.routes.installLiveness
 import org.opengb.routes.installNotify
+import org.opengb.routes.installUtilities
 import org.opengb.utility.UtilityRegistry
 import java.time.Duration
 import java.util.UUID
@@ -156,4 +157,5 @@ internal fun Application.appModule(deps: AppDeps) {
   installConnect(deps)
   installClaim(deps.claimStore)
   installNotify(deps.registry)
+  installUtilities(deps.registry)
 }

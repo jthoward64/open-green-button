@@ -181,6 +181,20 @@ s=$(status "$BASE_URL/connect/no_such_utility/callback?code=x&state=y")
 [ "$s" = "404" ] && pass "Callback for unknown utility returns 404" \
                  || fail "Unknown-utility callback returned $s (expected 404)"
 
+# /utilities — the discovery endpoint the HA config flow calls
+utilities_body=$(xcurl "$BASE_URL/utilities" || true)
+utilities_code=$(status "$BASE_URL/utilities")
+if [ "$utilities_code" = "200" ]; then
+    pass "GET /utilities returns 200"
+    if echo "$utilities_body" | grep -q "\"id\":\"$UTILITY\""; then
+        pass "/utilities lists '$UTILITY'"
+    else
+        fail "/utilities does not list '$UTILITY' — got: $utilities_body"
+    fi
+else
+    fail "GET /utilities returned $utilities_code (expected 200)"
+fi
+
 # Verify no stack traces / internal details leak in the error page body
 error_body=$(xcurl "$BASE_URL/connect/$UTILITY/callback?code=fake&state=junk" || true)
 if echo "$error_body" | grep -qiE 'stack|exception|caused by|kotlin\.|java\.lang'; then
