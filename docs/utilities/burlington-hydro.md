@@ -14,13 +14,27 @@ URLs to supply to Burlington's Green Button Support team:
 
 ## Scope
 
-ESPI scope template (function blocks for usage + billing data, sub-hourly intervals, historical depth):
+ESPI scope we request:
 
 ```
-FB=1_3_4_5_8_13_14_18_19_34_35_39_51;IntervalDuration=900_3600;BlockDuration=daily;HistoryLength=34128000;SubscriptionFrequency=daily;AccountCollection=2
+FB=1_3_4_5_7_8_10_11_13_14_15_16_18_19_31_32_35_37_39_51;IntervalDuration=900_3600;BlockDuration=Monthly;HistoryLength=94608000;SubscriptionFrequency=Daily;AccountCollection=5
 ```
 
-Burlington may grant less than requested (e.g. a shorter `HistoryLength`). The proxy persists the *granted* scope from the token response and the HA client surfaces it via the dashboard.
+Function block breakdown:
+
+| Group | FBs | Grants |
+|---|---|---|
+| Infrastructure | 1, 3, 13, 14, 31 | Common, Connect My Data, Security/Privacy, both legacy + modern OAuth |
+| Electricity | 4, 5, 7, 8 | Interval Metering, Interval Electricity, Net Metering (solar export), Forward/Reverse Metering |
+| Other fuels | 10, 11 | Gas, Water — utility grants whichever they support |
+| Billing | 15, 16 | Usage Summary, Usage Summary with Cost (powers HA's cost feature) |
+| Multi-meter | 18 | Multiple Usage Points (so we can read elec + gas + water together) |
+| Updates | 19, 39 | Partial Update Data, PUSH Model (NotificationURI we register) |
+| REST API | 32, 37 | Resource Level REST (UsagePoint/MeterReading/IntervalBlock), Query Parameters (`since=` filtering) |
+| Bulk | 35 | REST for Bulk (one-shot subscription dump for initial backfill) |
+| Customer ref | 51 | Retail Customer Common — lets the utility match the auth to a customer record |
+
+Burlington may grant less than requested — a customer who only has electric service won't get the gas/water FBs, and Burlington may cap `HistoryLength` to less than 36 months. The proxy persists the **granted** scope from the token response (`tokens.scope`, falling back to the requested scope if the utility omits it — handles both pre-negotiated and request-time-negotiated auth styles). The HA client surfaces what was actually granted in its diagnostics.
 
 ## Pre-submission readiness check
 

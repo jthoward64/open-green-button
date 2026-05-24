@@ -138,6 +138,13 @@ private suspend fun io.ktor.server.routing.RoutingContext.exchangeAndBuildBlob(
     call.respondCallbackError("Utility did not issue a refresh token.")
     return null
   }
+  // ESPI authorization comes in two flavours and we support both:
+  //   - FB_14 "legacy" / pre-negotiated scope: scope is fixed at registration time; the
+  //     utility may omit `scope` from the token response entirely. Fall back to the requested
+  //     scope so downstream code always has something to persist.
+  //   - FB_31 "modern" / scope negotiated at OAuth time: the customer can edit the scope on
+  //     the consent screen, and the utility returns the *granted* scope in the token response,
+  //     possibly a subset of what we asked for. Persist that.
   return RefreshBlob(
     utilityId = utility.id,
     refreshToken = refreshToken,

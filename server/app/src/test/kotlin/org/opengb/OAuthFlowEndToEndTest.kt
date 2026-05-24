@@ -148,6 +148,31 @@ val OAuthFlowEndToEndTest by testSuite {
       assert(resp.status == HttpStatusCode.Gone)
     }
   }
+
+  // Legacy / FB_14 auth: utility doesn't echo the granted scope in the token response (because
+  // scope was pre-negotiated at registration). The persisted blob must fall back to the
+  // requested scope so downstream code always has something to read.
+  test("blob falls back to defaultScope when utility omits scope (legacy / pre-negotiated auth)") {
+    runE2E(omitScope = true) { client, ctx ->
+      val location =
+        client.get("/connect/mock/start").headers[HttpHeaders.Location]
+          ?: error("Location header missing")
+      val state = parseQueryString(location.substringAfter('?', ""))["state"]!!
+      val callbackBody =
+        client.get("/connect/mock/callback") {
+          parameter("code", "auth_code_xyz")
+          parameter("state", state)
+        }.bodyAsText()
+      val claimCode = extractClaimCode(callbackBody) ?: error("claim code not found")
+      val redeemBody = client.post("/claim/$claimCode").bodyAsText()
+
+      val crypto = TokenCrypto(ctx.config.crypto)
+      val blob = crypto.decrypt(extractField(redeemBody, "encryptedRefreshBlob"))
+      assert(blob.scope == ctx.utility.defaultScope) {
+        "expected fallback to defaultScope when utility omits scope; got ${blob.scope}"
+      }
+    }
+  }
 }
 
 private data class TestCtx(
@@ -159,8 +184,15 @@ private data class TestCtx(
 // Test fixture setup is intentionally inlined here so the wiring is visible at a glance — the
 // utility profile, mock OAuth response, AppConfig, and test client are all configured together.
 // Splitting into helpers obscures the relationship between them.
+//
+// `omitScope` simulates a pre-negotiated (FB_14 legacy) auth flow where the utility doesn't
+// echo the granted scope back in the token response. The default exercises the modern flow
+// (FB_31) where the utility includes the granted scope.
 @Suppress("LongMethod")
-private fun runE2E(block: suspend (io.ktor.client.HttpClient, TestCtx) -> Unit) {
+private fun runE2E(
+  omitScope: Boolean = false,
+  block: suspend (io.ktor.client.HttpClient, TestCtx) -> Unit,
+) {
   val publicBaseUrl = "http://test.local"
   val utility =
     UtilityProfile(
@@ -174,21 +206,21 @@ private fun runE2E(block: suspend (io.ktor.client.HttpClient, TestCtx) -> Unit) 
       tokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
     )
 
+  val scopeField = if (omitScope) "" else """"scope":"${utility.defaultScope}","""
+  val tokenResponseJson =
+    """
+    {"access_token":"at_mock","refresh_token":"rt_mock_value",
+    "expires_in":3600,"token_type":"Bearer",$scopeField
+    "resourceURI":"https://utility.mock/Subscription/42",
+    "authorizationURI":"https://utility.mock/Authorization/7"}
+    """.trimIndent()
   val mockHttp =
     HttpClient(MockEngine) {
       engine {
         addHandler { request ->
           if (request.url.toString().startsWith("https://utility.mock/token")) {
             respond(
-              content =
-                ByteReadChannel(
-                  """
-                  {"access_token":"at_mock","refresh_token":"rt_mock_value",
-                  "expires_in":3600,"token_type":"Bearer","scope":"${utility.defaultScope}",
-                  "resourceURI":"https://utility.mock/Subscription/42",
-                  "authorizationURI":"https://utility.mock/Authorization/7"}
-                  """.trimIndent(),
-                ),
+              content = ByteReadChannel(tokenResponseJson),
               status = HttpStatusCode.OK,
               headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
