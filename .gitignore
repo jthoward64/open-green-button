@@ -49,3 +49,6 @@ mise.local.toml
 
 # Fly
 .fly/
+
+# Claude
+.claude/worktrees/
