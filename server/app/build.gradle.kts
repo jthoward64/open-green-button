@@ -49,6 +49,9 @@ dependencies {
     implementation(libs.bootable.config.hoplite)
     implementation(libs.bootable.log4j2)
 
+    // Kotlin idioms for log4j2 (KotlinLogger, withLoggingContext, StructuredMessage helpers)
+    implementation(libs.log4j.api.kotlin)
+
     // Ktor server
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
@@ -111,6 +114,18 @@ jib {
                 .orElse("ghcr.io/rocketraman/open-green-button-server")
                 .get()
         tags = setOf("latest", project.version.toString())
+
+        // When FLY_API_TOKEN is set (locally or in CI), authenticate directly with that token
+        // — bypassing whatever stale credentials might be in ~/.docker/config.json or
+        // /run/user/$UID/containers/auth.json. Fly's registry accepts any non-empty username
+        // with the API token as the password. Falls back to ambient Docker credentials when
+        // the env var is absent (e.g. pushing to GHCR with `docker login` creds).
+        providers.environmentVariable("FLY_API_TOKEN").orNull?.let { token ->
+            auth {
+                username = "x"
+                password = token
+            }
+        }
     }
     container {
         mainClass = "org.opengb.AppKt"

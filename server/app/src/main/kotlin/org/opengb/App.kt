@@ -9,8 +9,6 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.callid.CallId
-import io.ktor.server.plugins.callid.callIdMdc
-import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import kotlinx.serialization.json.Json
@@ -25,13 +23,13 @@ import org.opengb.config.loadConfig
 import org.opengb.oauth.ClaimStore
 import org.opengb.oauth.OAuthClient
 import org.opengb.oauth.StateStore
+import org.opengb.observability.installAccessLog
 import org.opengb.proxy.TokenCrypto
 import org.opengb.routes.installClaim
 import org.opengb.routes.installConnect
 import org.opengb.routes.installLanding
 import org.opengb.routes.installLiveness
 import org.opengb.utility.UtilityRegistry
-import org.slf4j.event.Level
 import java.time.Duration
 import java.util.UUID
 
@@ -132,14 +130,10 @@ internal fun Application.appModule(deps: AppDeps) {
         retrieveFromHeader("X-Request-Id")
         replyToHeader("X-Request-Id")
     }
-    install(CallLogging) {
-        level = Level.INFO
-        callIdMdc("requestId")
-        filter { call ->
-            val path = call.request.local.uri
-            path != "/health" && path != "/ready"
-        }
-    }
+    // Structured per-request log via a log4j2 StructuredMessage subclass + coroutine-safe
+    // ThreadContext propagation (so any non-access log emitted *during* the request also
+    // inherits http.request.id and trace.id). See [installAccessLog] for details.
+    installAccessLog()
     install(ContentNegotiation) {
         json(
             Json {

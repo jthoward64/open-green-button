@@ -38,5 +38,14 @@ local.properties
 .env.local
 secrets.local.toml
 
+# mise per-machine overrides (commit mise.toml; tweak locally in mise.local.toml)
+mise.local.toml
+.mise.local.toml
+
+# Editor swap files
+*.swp
+*.swo
+*~
+
 # Fly
 .fly/

@@ -9,7 +9,7 @@ DOMAIN = "greenbutton"
 DEFAULT_SCAN_INTERVAL = timedelta(hours=6)
 
 # The hosted proxy server. May be overridden per-config-entry for self-hosters.
-DEFAULT_SERVER_BASE_URL = "https://greenbutton.opengb.org"
+DEFAULT_SERVER_BASE_URL = "https://api.opengreenbutton.org"
 
 # Stripe-style API version this client was built against.
 # Server dispatches requests to the matching handler version.

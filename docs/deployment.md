@@ -58,3 +58,25 @@ The server's `utilities.conf` reads these via Hoplite env substitution.
 ## Going live
 
 Set `OPENGB_LANDING_MODE=LIVE` to switch the landing page from the "coming soon" stub to the privacy-story copy.
+
+## Continuous deploy from GitHub Actions
+
+[.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `master` that touches `server/**`. It builds, tests, pushes the Jib image to `registry.fly.io/open-green-button:<sha>`, and runs `flyctl deploy` against that immutable SHA-tagged image.
+
+One-time setup — generate a deploy token and store it as a repo secret:
+
+```sh
+fly tokens create deploy -x 8760h   # 1 year, scoped to deploy only
+# copy the token (starts with "FlyV1 ...")
+```
+
+Then in GitHub: **Settings → Secrets and variables → Actions → New repository secret**
+
+- Name: `FLY_API_TOKEN`
+- Value: paste the token from `fly tokens create`
+
+The token can be rotated at any time with `fly tokens revoke` + a fresh `fly tokens create`. Avoid using your personal `fly auth token` for CI — deploy tokens are scoped narrower and easier to revoke.
+
+To deploy manually without a commit: Actions tab → "deploy" workflow → "Run workflow".
+
+To roll back: `flyctl releases --app open-green-button` to find a prior image, then `flyctl deploy --app open-green-button --image registry.fly.io/open-green-button:<old-sha>`.

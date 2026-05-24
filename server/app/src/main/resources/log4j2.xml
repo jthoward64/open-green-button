@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Overrides Bootable's stock log4j2-base-json.xml Console appender so we can swap in our custom
+  JSON event template. Bootable's loggingInit() merges this file with its base config
+  (last-write-wins per appender/logger name), so we only need to redeclare what we're changing.
+-->
+<Configuration status="error">
+  <Appenders>
+    <Console name="Console" direct="${env:LOGGING_CONSOLE_DIRECT:-${sys:logging.console.direct:-true}}">
+      <JsonTemplateLayout
+        eventTemplateUri="classpath:OpenGbEcsLayout.json"
+        locationInfoEnabled="${env:LOGGING_LOCATION_ENABLED:-${sys:logging.location.enabled:-false}}"
+      />
+    </Console>
+  </Appenders>
+</Configuration>
