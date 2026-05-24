@@ -22,6 +22,24 @@ FB=1_3_4_5_8_13_14_18_19_34_35_39_51;IntervalDuration=900_3600;BlockDuration=dai
 
 Burlington may grant less than requested (e.g. a shorter `HistoryLength`). The proxy persists the *granted* scope from the token response and the HA client surfaces it via the dashboard.
 
+## Pre-submission readiness check
+
+Before sending the URLs to Burlington GB Support, run the readiness check against the live
+deployment — it exercises the endpoints their reviewer will probe and flags anything broken:
+
+```sh
+scripts/utility-readiness-check.sh https://api.opengreenbutton.org burlington_hydro
+```
+
+Checks: DNS resolution, TLS cert validity, `/health` + `/ready`, landing page renders, security
+headers, OAuth callback handles missing / hostile / unknown-state inputs without 5xx or stack
+trace leaks, NotificationURI accepts POST and rejects GET, OAuth start redirects with all five
+required query params (`response_type`, `client_id`, `redirect_uri`, `scope`, `state`), the
+redirect_uri matches what's been registered, and unknown claim codes return 410 Gone.
+
+Exits non-zero if anything fails. WARNs are informational. The script is safe to share with
+the utility's review team if they want to see what we tested.
+
 ## Test lab
 
 Burlington routes test-lab onboarding through their Green Button Support partner. They configure the application in their test environment using the URLs above, then coordinate a session with us to walk through OAuth + first data fetch.
