@@ -15,12 +15,7 @@
 #   Keeping mise in sync means a stray `gradle` command (without `./gradlew`)
 #   resolves to the same binary the wrapper would download — no "two daemons
 #   competing for the build cache" surprises.
-#
-# Why pin Python 3.13:
-#   Matches the version pin in .github/workflows/client-ha-ci.yml and the
-#   Home Assistant integration's expected runtime.
 
 [tools]
 java = "temurin-21"
 gradle = "8.14.1"
-python = "3.13"

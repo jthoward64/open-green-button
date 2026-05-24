@@ -254,7 +254,13 @@ private fun BODY.getStarted() {
       ol("steps-list") {
         li {
           strong { +"Install via HACS. " }
-          +"In Home Assistant, open HACS → search "
+          +"In Home Assistant, open HACS → ⋮ → "
+          strong { +"Custom repositories" }
+          +" and add "
+          a(href = "https://github.com/rocketraman/open-green-button-homeassistant") {
+            code { +"rocketraman/open-green-button-homeassistant" }
+          }
+          +" as an Integration. Then search "
           code { +"Open Green Button" }
           +" → Install. Restart Home Assistant when prompted."
         }
@@ -312,55 +318,70 @@ private fun BODY.siteFooter() {
   div("site-footer") {
     div("container") {
       div("footer-cols") {
-        div {
-          strong { +"Open Green Button" }
-          p("muted small") {
-            +"An open-source bridge for utility energy data into Home Assistant."
-          }
-        }
-        div {
-          h3("footer-h") { +"Project" }
-          ul("footer-list") {
-            li {
-              a(href = "https://github.com/rocketraman/open-green-button") { +"Source on GitHub" }
-            }
-            li {
-              a(href = "https://github.com/rocketraman/open-green-button/issues") {
-                +"Report an issue"
-              }
-            }
-            li {
-              a(href = "https://github.com/rocketraman/open-green-button/blob/master/LICENSE") {
-                +"MIT License"
-              }
-            }
-          }
-        }
-        div {
-          h3("footer-h") { +"Support" }
-          ul("footer-list") {
-            li {
-              a(href = "https://github.com/sponsors/rocketraman") { +"GitHub Sponsors" }
-            }
-            li {
-              a(href = "https://www.buymeacoffee.com/rocketraman") { +"Buy Me a Coffee" }
-            }
-          }
-        }
-        div {
-          h3("footer-h") { +"Contact" }
-          ul("footer-list") {
-            li {
-              a(href = "mailto:rocketraman@gmail.com") { +"rocketraman@gmail.com" }
-            }
-          }
-        }
+        footerBrandColumn()
+        footerProjectColumn()
+        footerSupportColumn()
+        footerContactColumn()
       }
       p("muted small footer-copy") {
         +"© 2026 Open Green Button Contributors. "
         +"\"Green Button\" is a registered trademark of the Green Button Alliance, "
         +"used here in reference to the open data standard."
       }
+    }
+  }
+}
+
+private fun FlowContent.footerBrandColumn() {
+  div {
+    strong { +"Open Green Button" }
+    p("muted small") {
+      +"An open-source bridge for utility energy data into Home Assistant."
+    }
+  }
+}
+
+private fun FlowContent.footerProjectColumn() {
+  div {
+    h3("footer-h") { +"Project" }
+    ul("footer-list") {
+      li {
+        a(href = "https://github.com/rocketraman/open-green-button") { +"Server on GitHub" }
+      }
+      li {
+        a(href = "https://github.com/rocketraman/open-green-button-homeassistant") {
+          +"HA integration on GitHub"
+        }
+      }
+      li {
+        a(href = "https://github.com/rocketraman/open-green-button/issues") {
+          +"Report an issue"
+        }
+      }
+      li {
+        a(href = "https://github.com/rocketraman/open-green-button/blob/master/LICENSE") {
+          +"MIT License"
+        }
+      }
+    }
+  }
+}
+
+private fun FlowContent.footerSupportColumn() {
+  div {
+    h3("footer-h") { +"Support" }
+    ul("footer-list") {
+      li { a(href = "https://github.com/sponsors/rocketraman") { +"GitHub Sponsors" } }
+      li { a(href = "https://www.buymeacoffee.com/rocketraman") { +"Buy Me a Coffee" } }
+    }
+  }
+}
+
+private fun FlowContent.footerContactColumn() {
+  div {
+    h3("footer-h") { +"Contact" }
+    ul("footer-list") {
+      li { a(href = "mailto:rocketraman@gmail.com") { +"rocketraman@gmail.com" } }
     }
   }
 }

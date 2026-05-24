@@ -11,9 +11,10 @@ The hosted server is a **stateless OAuth proxy**: utilities require a stable pub
 ## Components
 
 - `server/` — Kotlin/Ktor proxy server (deployed to Fly.io with scale-to-zero)
-- `client-ha-integration/` — Home Assistant custom integration (HACS-installable)
 - `docs/` — Architecture, deployment, per-utility notes
 - `branding/` — Logo and brand assets
+
+The **Home Assistant custom integration** lives in its own repository so HACS validation finds the canonical `custom_components/` + `hacs.json` layout at the repo root: [rocketraman/open-green-button-homeassistant](https://github.com/rocketraman/open-green-button-homeassistant).
 
 ## Privacy
 
