@@ -40,25 +40,25 @@ import java.util.UUID
  * (e.g. a Ktor MockEngine for the OAuth upstream client).
  */
 data class AppDeps(
-    val config: AppConfig,
-    val crypto: TokenCrypto,
-    val registry: UtilityRegistry,
-    val stateStore: StateStore,
-    val claimStore: ClaimStore,
-    val oauth: OAuthClient,
+  val config: AppConfig,
+  val crypto: TokenCrypto,
+  val registry: UtilityRegistry,
+  val stateStore: StateStore,
+  val claimStore: ClaimStore,
+  val oauth: OAuthClient,
 )
 
 fun buildAppDeps(
-    config: AppConfig,
-    http: HttpClient? = null,
+  config: AppConfig,
+  http: HttpClient? = null,
 ): AppDeps {
-    val crypto = TokenCrypto(config.crypto)
-    val registry = UtilityRegistry(config.utilities)
-    val stateStore = StateStore(ttl = Duration.ofSeconds(config.state.oauthStateTtlSeconds))
-    val claimStore = ClaimStore(ttl = Duration.ofSeconds(config.state.claimCodeTtlSeconds))
-    val httpClient = http ?: HttpClient(CIO)
-    val oauth = OAuthClient(httpClient)
-    return AppDeps(config, crypto, registry, stateStore, claimStore, oauth)
+  val crypto = TokenCrypto(config.crypto)
+  val registry = UtilityRegistry(config.utilities)
+  val stateStore = StateStore(ttl = Duration.ofSeconds(config.state.oauthStateTtlSeconds))
+  val claimStore = ClaimStore(ttl = Duration.ofSeconds(config.state.claimCodeTtlSeconds))
+  val httpClient = http ?: HttpClient(CIO)
+  val oauth = OAuthClient(httpClient)
+  return AppDeps(config, crypto, registry, stateStore, claimStore, oauth)
 }
 
 /**
@@ -66,11 +66,11 @@ fun buildAppDeps(
  * are resolved by Kodein-DI from the singletons bound in [opengbModule].
  */
 class OpenGbServer(
-    private val deps: AppDeps,
+  private val deps: AppDeps,
 ) : CioKtorService(name = "opengb", hostPort = deps.config.server) {
-    override fun Application.module() {
-        appModule(deps)
-    }
+  override fun Application.module() {
+    appModule(deps)
+  }
 }
 
 /**
@@ -79,41 +79,41 @@ class OpenGbServer(
  * a connection pool and should be reused across requests.
  */
 val opengbModule =
-    DI.Module("opengb") {
-        bind<AppConfig> { singleton { loadConfig() } }
-        bind<HttpClient> { singleton { HttpClient(CIO) } }
-        bind<TokenCrypto> { singleton { TokenCrypto(instance<AppConfig>().crypto) } }
-        bind<UtilityRegistry> { singleton { UtilityRegistry(instance<AppConfig>().utilities) } }
-        bind<StateStore> {
-            singleton {
-                StateStore(ttl = Duration.ofSeconds(instance<AppConfig>().state.oauthStateTtlSeconds))
-            }
-        }
-        bind<ClaimStore> {
-            singleton {
-                ClaimStore(ttl = Duration.ofSeconds(instance<AppConfig>().state.claimCodeTtlSeconds))
-            }
-        }
-        bind<OAuthClient> { singleton { OAuthClient(instance()) } }
-        bind<AppDeps> {
-            singleton {
-                AppDeps(
-                    config = instance(),
-                    crypto = instance(),
-                    registry = instance(),
-                    stateStore = instance(),
-                    claimStore = instance(),
-                    oauth = instance(),
-                )
-            }
-        }
-        bindAppService { singleton { new(::OpenGbServer) } }
+  DI.Module("opengb") {
+    bind<AppConfig> { singleton { loadConfig() } }
+    bind<HttpClient> { singleton { HttpClient(CIO) } }
+    bind<TokenCrypto> { singleton { TokenCrypto(instance<AppConfig>().crypto) } }
+    bind<UtilityRegistry> { singleton { UtilityRegistry(instance<AppConfig>().utilities) } }
+    bind<StateStore> {
+      singleton {
+        StateStore(ttl = Duration.ofSeconds(instance<AppConfig>().state.oauthStateTtlSeconds))
+      }
     }
+    bind<ClaimStore> {
+      singleton {
+        ClaimStore(ttl = Duration.ofSeconds(instance<AppConfig>().state.claimCodeTtlSeconds))
+      }
+    }
+    bind<OAuthClient> { singleton { OAuthClient(instance()) } }
+    bind<AppDeps> {
+      singleton {
+        AppDeps(
+          config = instance(),
+          crypto = instance(),
+          registry = instance(),
+          stateStore = instance(),
+          claimStore = instance(),
+          oauth = instance(),
+        )
+      }
+    }
+    bindAppService { singleton { new(::OpenGbServer) } }
+  }
 
 fun main() {
-    boot(loggingType = LoggingType.JSON) {
-        import(opengbModule)
-    }
+  boot(loggingType = LoggingType.JSON) {
+    import(opengbModule)
+  }
 }
 
 /**
@@ -121,32 +121,32 @@ fun main() {
  * by the test suite (which constructs an [AppDeps] directly with mocked HTTP).
  */
 internal fun Application.appModule(deps: AppDeps) {
-    install(DefaultHeaders) {
-        header("X-Frame-Options", "DENY")
-        header("X-Content-Type-Options", "nosniff")
-        header("Referrer-Policy", "no-referrer")
-    }
-    install(CallId) {
-        generate { UUID.randomUUID().toString() }
-        retrieveFromHeader("X-Request-Id")
-        replyToHeader("X-Request-Id")
-    }
-    // Structured per-request log via a log4j2 StructuredMessage subclass + coroutine-safe
-    // ThreadContext propagation (so any non-access log emitted *during* the request also
-    // inherits http.request.id and trace.id). See [installAccessLog] for details.
-    installAccessLog()
-    install(ContentNegotiation) {
-        json(
-            Json {
-                prettyPrint = false
-                ignoreUnknownKeys = true
-                encodeDefaults = false
-            },
-        )
-    }
-    installLiveness()
-    installLanding(deps.config)
-    installConnect(deps)
-    installClaim(deps.claimStore)
-    installNotify(deps.registry)
+  install(DefaultHeaders) {
+    header("X-Frame-Options", "DENY")
+    header("X-Content-Type-Options", "nosniff")
+    header("Referrer-Policy", "no-referrer")
+  }
+  install(CallId) {
+    generate { UUID.randomUUID().toString() }
+    retrieveFromHeader("X-Request-Id")
+    replyToHeader("X-Request-Id")
+  }
+  // Structured per-request log via a log4j2 StructuredMessage subclass + coroutine-safe
+  // ThreadContext propagation (so any non-access log emitted *during* the request also
+  // inherits http.request.id and trace.id). See [installAccessLog] for details.
+  installAccessLog()
+  install(ContentNegotiation) {
+    json(
+      Json {
+        prettyPrint = false
+        ignoreUnknownKeys = true
+        encodeDefaults = false
+      },
+    )
+  }
+  installLiveness()
+  installLanding(deps.config)
+  installConnect(deps)
+  installClaim(deps.claimStore)
+  installNotify(deps.registry)
 }

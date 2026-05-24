@@ -24,25 +24,25 @@ private val notifyLog = logger("opengb.notify")
  * without a body to parse.
  */
 fun Application.installNotify(registry: UtilityRegistry) {
-    routing {
-        post("/notify/{utility}") {
-            val utilityId = call.parameters["utility"].orEmpty()
-            val known = registry[utilityId] != null
-            val event =
-                StringMapMessage().apply {
-                    put("utility.id", utilityId)
-                    put("utility.known", known.toString())
-                    call.request.contentType().toString().takeIf { it.isNotBlank() }?.let {
-                        put("http.request.body.mime_type", it)
-                    }
-                    call.request.contentLength()?.let { put("http.request.body.bytes", it.toString()) }
-                }
-            notifyLog.info(event)
-            if (!known) {
-                call.respond(HttpStatusCode.NotFound)
-                return@post
-            }
-            call.respond(HttpStatusCode.NoContent)
+  routing {
+    post("/notify/{utility}") {
+      val utilityId = call.parameters["utility"].orEmpty()
+      val known = registry[utilityId] != null
+      val event =
+        StringMapMessage().apply {
+          put("utility.id", utilityId)
+          put("utility.known", known.toString())
+          call.request.contentType().toString().takeIf { it.isNotBlank() }?.let {
+            put("http.request.body.mime_type", it)
+          }
+          call.request.contentLength()?.let { put("http.request.body.bytes", it.toString()) }
         }
+      notifyLog.info(event)
+      if (!known) {
+        call.respond(HttpStatusCode.NotFound)
+        return@post
+      }
+      call.respond(HttpStatusCode.NoContent)
     }
+  }
 }

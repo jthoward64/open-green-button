@@ -15,8 +15,17 @@ exceptions:
     # legitimate instance check pattern, not the misuse this rule was designed for.
     active: false
 
-ktlint:
+# Detekt's ktlint-wrapping ruleset. Most rules read settings (indentSize, max line length,
+# etc.) from .editorconfig like standalone ktlint does — so the per-project indent of 2 lives
+# in .editorconfig and applies to both the standalone ktlint-gradle plugin and to detekt here.
+formatting:
   Indentation:
+    # ktlint-gradle (the standalone plugin) and detekt-formatting bundle different ktlint
+    # versions that disagree on continuation-indent edge cases. ktlint-gradle wins for
+    # formatting (it has the auto-fix task); detekt-formatting only enforces. Leave this rule
+    # off here to avoid version-drift noise — `indentSize: 2` is preserved below as the
+    # project's documented intent for any tool that reads detekt's YAML.
+    active: false
     indentSize: 2
 
 style:
@@ -43,4 +52,26 @@ style:
     ignoreNamedArgument: true
     ignoreLocalVariableDeclaration: true
     ignoreCompanionObjectPropertyDeclaration: true
-  NoTabs: true
+  ForbiddenImport:
+    # We rely on Kotlin's built-in `assert(...)` instead of kotlin.test.assert* because
+    # power-assert (kotlin.assert in our config) decomposes the boolean expression and prints
+    # the values of each subexpression on failure — far better diagnostics than typed asserts.
+    # See `powerAssert { functions = listOf("kotlin.assert") }` in each module's build script.
+    active: true
+    imports:
+      - value: 'kotlin.test.assertEquals'
+        reason: 'Use `assert(actual == expected)` — power-assert prints both sides on failure.'
+      - value: 'kotlin.test.assertNotEquals'
+        reason: 'Use `assert(a != b)` — power-assert prints both sides on failure.'
+      - value: 'kotlin.test.assertTrue'
+        reason: 'Use `assert(condition)` — power-assert decomposes the expression on failure.'
+      - value: 'kotlin.test.assertFalse'
+        reason: 'Use `assert(!condition)` — power-assert decomposes the expression on failure.'
+      - value: 'kotlin.test.assertNull'
+        reason: 'Use `assert(value == null)`.'
+      - value: 'kotlin.test.assertNotNull'
+        reason: 'Use `value ?: error("..."); /* now smart-cast non-null */` or `assert(value != null)`.'
+      - value: 'kotlin.test.assertContains'
+        reason: 'Use `assert(haystack.contains(needle))`.'
+      - value: 'kotlin.test.fail'
+        reason: 'Use `throw AssertionError("...")` or `error("...")`.'

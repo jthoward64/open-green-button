@@ -24,49 +24,49 @@ import org.slf4j.LoggerFactory
  * Subclasses provide [Application.module] to install routes and plugins.
  */
 abstract class CioKtorService(
-    private val name: String,
-    private val hostPort: HostPort,
+  private val name: String,
+  private val hostPort: HostPort,
 ) : AdvancedAppService {
-    private lateinit var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>
-    private lateinit var die: () -> Unit
+  private lateinit var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>
+  private lateinit var die: () -> Unit
 
-    override fun name(): String = name
+  override fun name(): String = name
 
-    /** Defaults to the lowest priority so the HTTP listener is the last thing to start, first to stop. */
-    override fun priority(): Int = Int.MIN_VALUE
+  /** Defaults to the lowest priority so the HTTP listener is the last thing to start, first to stop. */
+  override fun priority(): Int = Int.MIN_VALUE
 
-    override fun start(die: () -> Unit) {
-        this.die = die
-        val environment =
-            applicationEnvironment {
-                log = LoggerFactory.getLogger(name)
-            }
-        server =
-            embeddedServer(
-                CIO,
-                environment = environment,
-                configure = {
-                    connector {
-                        host = this@CioKtorService.hostPort.host()
-                        port = this@CioKtorService.hostPort.port(DEFAULT_PORT)
-                    }
-                },
-                module = { module() },
-            )
-        server.start(wait = false)
+  override fun start(die: () -> Unit) {
+    this.die = die
+    val environment =
+      applicationEnvironment {
+        log = LoggerFactory.getLogger(name)
+      }
+    server =
+      embeddedServer(
+        CIO,
+        environment = environment,
+        configure = {
+          connector {
+            host = this@CioKtorService.hostPort.host()
+            port = this@CioKtorService.hostPort.port(DEFAULT_PORT)
+          }
+        },
+        module = { module() },
+      )
+    server.start(wait = false)
+  }
+
+  override fun shutdown() {
+    if (::server.isInitialized) {
+      server.stop(GRACE_PERIOD_MS, FORCED_STOP_TIMEOUT_MS)
     }
+  }
 
-    override fun shutdown() {
-        if (::server.isInitialized) {
-            server.stop(GRACE_PERIOD_MS, FORCED_STOP_TIMEOUT_MS)
-        }
-    }
+  abstract fun Application.module()
 
-    abstract fun Application.module()
-
-    companion object {
-        private const val DEFAULT_PORT = 8080
-        private const val GRACE_PERIOD_MS = 50L
-        private const val FORCED_STOP_TIMEOUT_MS = 1_000L
-    }
+  companion object {
+    private const val DEFAULT_PORT = 8080
+    private const val GRACE_PERIOD_MS = 50L
+    private const val FORCED_STOP_TIMEOUT_MS = 1_000L
+  }
 }

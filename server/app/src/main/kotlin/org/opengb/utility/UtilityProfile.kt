@@ -10,25 +10,25 @@ import com.sksamuel.hoplite.Masked
  * that lives on the server is what all users share, not what any individual user owns.
  */
 data class UtilityProfile(
-    val id: String,
-    val displayName: String,
-    val authorizeUrl: String,
-    val tokenUrl: String,
-    val clientId: String,
-    val clientSecret: Masked,
-    val defaultScope: String,
-    /** Where the utility POSTs notifications. The proxy registers this URL at app submission time. */
-    val notificationPath: String = "/notify/$id",
-    val tokenAuthStyle: TokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
-    val quirks: UtilityQuirks = UtilityQuirks(),
+  val id: String,
+  val displayName: String,
+  val authorizeUrl: String,
+  val tokenUrl: String,
+  val clientId: String,
+  val clientSecret: Masked,
+  val defaultScope: String,
+  /** Where the utility POSTs notifications. The proxy registers this URL at app submission time. */
+  val notificationPath: String = "/notify/$id",
+  val tokenAuthStyle: TokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
+  val quirks: UtilityQuirks = UtilityQuirks(),
 )
 
 enum class TokenAuthStyle {
-    /** HTTP Basic header carrying client_id:client_secret. */
-    HTTP_BASIC,
+  /** HTTP Basic header carrying client_id:client_secret. */
+  HTTP_BASIC,
 
-    /** client_id and client_secret as form params in the body. */
-    FORM_BODY,
+  /** client_id and client_secret as form params in the body. */
+  FORM_BODY,
 }
 
 /**
@@ -36,8 +36,8 @@ enum class TokenAuthStyle {
  * non-conforming behaviour in the wild; do NOT add behaviour-changing logic to the registry itself.
  */
 data class UtilityQuirks(
-    val sendsRefreshTokenOnRefresh: Boolean = true,
-    val requiresClientCredentialsForMetadata: Boolean = false,
+  val sendsRefreshTokenOnRefresh: Boolean = true,
+  val requiresClientCredentialsForMetadata: Boolean = false,
 )
 
 data class UtilitiesConfig(val utilities: List<UtilityProfile> = emptyList())

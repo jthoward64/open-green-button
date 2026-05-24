@@ -15,50 +15,50 @@ import java.time.Duration
  */
 @Serializable
 data class ClaimRecord(
-    val utilityId: String,
-    val encryptedRefreshBlob: String,
-    val proxyToken: String,
-    val subscriptionUri: String? = null,
-    val scope: String? = null,
+  val utilityId: String,
+  val encryptedRefreshBlob: String,
+  val proxyToken: String,
+  val subscriptionUri: String? = null,
+  val scope: String? = null,
 )
 
 class ClaimStore(
-    ttl: Duration,
-    maxEntries: Long = 10_000,
-    private val random: SecureRandom = SecureRandom(),
+  ttl: Duration,
+  maxEntries: Long = 10_000,
+  private val random: SecureRandom = SecureRandom(),
 ) {
-    private val cache: Cache<String, ClaimRecord> =
-        Caffeine.newBuilder()
-            .expireAfterWrite(ttl)
-            .maximumSize(maxEntries)
-            .build()
+  private val cache: Cache<String, ClaimRecord> =
+    Caffeine.newBuilder()
+      .expireAfterWrite(ttl)
+      .maximumSize(maxEntries)
+      .build()
 
-    fun create(record: ClaimRecord): String {
-        val code = generateCode()
-        cache.put(code, record)
-        return code
+  fun create(record: ClaimRecord): String {
+    val code = generateCode()
+    cache.put(code, record)
+    return code
+  }
+
+  /** Atomically consumes the claim code. Returns null if the code is unknown or already used. */
+  fun redeem(code: String): ClaimRecord? = cache.asMap().remove(code)
+
+  fun size(): Long = cache.estimatedSize()
+
+  private fun generateCode(): String {
+    // ≈110 bits of entropy in a human-friendly form.
+    val bytes = ByteArray(14)
+    random.nextBytes(bytes)
+    val sb = StringBuilder("gb_live_")
+    for (b in bytes) {
+      sb.append(ALPHABET[(b.toInt() ushr 4) and 0x0F])
+      sb.append(ALPHABET[b.toInt() and 0x0F])
     }
+    return sb.toString().take(CODE_LENGTH)
+  }
 
-    /** Atomically consumes the claim code. Returns null if the code is unknown or already used. */
-    fun redeem(code: String): ClaimRecord? = cache.asMap().remove(code)
-
-    fun size(): Long = cache.estimatedSize()
-
-    private fun generateCode(): String {
-        // ≈110 bits of entropy in a human-friendly form.
-        val bytes = ByteArray(14)
-        random.nextBytes(bytes)
-        val sb = StringBuilder("gb_live_")
-        for (b in bytes) {
-            sb.append(ALPHABET[(b.toInt() ushr 4) and 0x0F])
-            sb.append(ALPHABET[b.toInt() and 0x0F])
-        }
-        return sb.toString().take(CODE_LENGTH)
-    }
-
-    companion object {
-        /** Base32-ish alphabet without confusing characters (0/O, 1/l/I). */
-        private val ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz".toCharArray()
-        private const val CODE_LENGTH = "gb_live_".length + 22
-    }
+  companion object {
+    /** Base32-ish alphabet without confusing characters (0/O, 1/l/I). */
+    private val ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz".toCharArray()
+    private const val CODE_LENGTH = "gb_live_".length + 22
+  }
 }

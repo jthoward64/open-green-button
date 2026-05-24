@@ -11,11 +11,11 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class RefreshBlob(
-    val utilityId: String,
-    val refreshToken: String,
-    val subscriptionUri: String? = null,
-    val authorizationUri: String? = null,
-    val scope: String? = null,
-    /** Issued-at epoch seconds — used only for diagnostic surfacing in the dashboard. */
-    val issuedAt: Long = System.currentTimeMillis() / 1000,
+  val utilityId: String,
+  val refreshToken: String,
+  val subscriptionUri: String? = null,
+  val authorizationUri: String? = null,
+  val scope: String? = null,
+  /** Issued-at epoch seconds — used only for diagnostic surfacing in the dashboard. */
+  val issuedAt: Long = System.currentTimeMillis() / 1000,
 )

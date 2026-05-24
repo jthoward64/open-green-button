@@ -25,23 +25,23 @@ import org.apache.logging.log4j.message.StringMapMessage
  * ```
  */
 abstract class StructuredLogMessage : StringMapMessage() {
-    /** Short single-line summary; rendered into the JSON `message` field. */
-    protected abstract val humanMessage: String
+  /** Short single-line summary; rendered into the JSON `message` field. */
+  protected abstract val humanMessage: String
 
-    final override fun getFormattedMessage(): String = humanMessage
+  final override fun getFormattedMessage(): String = humanMessage
 
-    // JsonTemplateLayout's message resolver short-circuits to formatTo() when the message
-    // implements StringBuilderFormattable (which MapMessage does), bypassing
-    // getFormattedMessage(). Override both so either code path renders the human message.
-    final override fun formatTo(buffer: StringBuilder) {
-        buffer.append(humanMessage)
-    }
+  // JsonTemplateLayout's message resolver short-circuits to formatTo() when the message
+  // implements StringBuilderFormattable (which MapMessage does), bypassing
+  // getFormattedMessage(). Override both so either code path renders the human message.
+  final override fun formatTo(buffer: StringBuilder) {
+    buffer.append(humanMessage)
+  }
 
-    /** Convenience for subclasses: skip null values so the rendered map stays clean. */
-    protected fun field(
-        key: String,
-        value: Any?,
-    ) {
-        if (value != null) put(key, value.toString())
-    }
+  /** Convenience for subclasses: skip null values so the rendered map stays clean. */
+  protected fun field(
+    key: String,
+    value: Any?,
+  ) {
+    if (value != null) put(key, value.toString())
+  }
 }

@@ -24,40 +24,40 @@ private val accessLog = logger("opengb.access")
  * fill the log stream with noise.
  */
 fun Application.installAccessLog() {
-    intercept(ApplicationCallPipeline.Setup) {
-        val path = call.request.local.uri
-        if (path == "/health" || path == "/ready" || path == "/metrics") {
-            proceed()
-            return@intercept
-        }
-
-        val start = System.nanoTime()
-        val traceId = call.request.headers["Fly-Trace-Id"]
-        val requestId = call.callId
-
-        val contextMap: Map<String, String> =
-            buildMap {
-                requestId?.let { put("http.request.id", it) }
-                traceId?.let { put("trace.id", it) }
-            }
-
-        // withLoggingContext is coroutine-aware — the ThreadContext entries are preserved
-        // across suspension points inside proceed().
-        withLoggingContext(contextMap) {
-            try {
-                proceed()
-            } finally {
-                AccessLogMessage(
-                    method = call.request.local.method.value,
-                    path = path,
-                    status = call.response.status()?.value ?: 0,
-                    durationNanos = System.nanoTime() - start,
-                    clientIp = call.request.headers["Fly-Client-IP"] ?: call.request.local.remoteHost,
-                    userAgent = call.request.headers["User-Agent"],
-                ).log()
-            }
-        }
+  intercept(ApplicationCallPipeline.Setup) {
+    val path = call.request.local.uri
+    if (path == "/health" || path == "/ready" || path == "/metrics") {
+      proceed()
+      return@intercept
     }
+
+    val start = System.nanoTime()
+    val traceId = call.request.headers["Fly-Trace-Id"]
+    val requestId = call.callId
+
+    val contextMap: Map<String, String> =
+      buildMap {
+        requestId?.let { put("http.request.id", it) }
+        traceId?.let { put("trace.id", it) }
+      }
+
+    // withLoggingContext is coroutine-aware — the ThreadContext entries are preserved
+    // across suspension points inside proceed().
+    withLoggingContext(contextMap) {
+      try {
+        proceed()
+      } finally {
+        AccessLogMessage(
+          method = call.request.local.method.value,
+          path = path,
+          status = call.response.status()?.value ?: 0,
+          durationNanos = System.nanoTime() - start,
+          clientIp = call.request.headers["Fly-Client-IP"] ?: call.request.local.remoteHost,
+          userAgent = call.request.headers["User-Agent"],
+        ).log()
+      }
+    }
+  }
 }
 
 /**
@@ -67,24 +67,24 @@ fun Application.installAccessLog() {
  * come from ThreadContext set by [installAccessLog].
  */
 class AccessLogMessage(
-    val method: String,
-    val path: String,
-    val status: Int,
-    val durationNanos: Long,
-    val clientIp: String?,
-    val userAgent: String?,
+  val method: String,
+  val path: String,
+  val status: Int,
+  val durationNanos: Long,
+  val clientIp: String?,
+  val userAgent: String?,
 ) : StructuredLogMessage() {
-    init {
-        field("http.request.method", method)
-        field("url.path", path)
-        field("http.response.status_code", status)
-        field("event.duration", durationNanos)
-        field("client.ip", clientIp)
-        field("user_agent.original", userAgent)
-    }
+  init {
+    field("http.request.method", method)
+    field("url.path", path)
+    field("http.response.status_code", status)
+    field("event.duration", durationNanos)
+    field("client.ip", clientIp)
+    field("user_agent.original", userAgent)
+  }
 
-    override val humanMessage: String
-        get() = "$method $path -> $status"
+  override val humanMessage: String
+    get() = "$method $path -> $status"
 
-    fun log() = accessLog.info(this)
+  fun log() = accessLog.info(this)
 }

@@ -18,46 +18,46 @@ import org.opengb.oauth.ClaimStore
  * successfully persisted the response — by design, callers retry by restarting the OAuth flow.
  */
 fun Application.installClaim(
-    claimStore: ClaimStore,
-    currentApiVersion: String = CURRENT_API_VERSION,
+  claimStore: ClaimStore,
+  currentApiVersion: String = CURRENT_API_VERSION,
 ) {
-    routing {
-        post("/claim/{code}") {
-            val code = call.parameters["code"].orEmpty()
-            if (code.isBlank()) {
-                call.respond(HttpStatusCode.BadRequest, ErrorBody(error = "missing_code"))
-                return@post
-            }
+  routing {
+    post("/claim/{code}") {
+      val code = call.parameters["code"].orEmpty()
+      if (code.isBlank()) {
+        call.respond(HttpStatusCode.BadRequest, ErrorBody(error = "missing_code"))
+        return@post
+      }
 
-            val record = claimStore.redeem(code)
-            if (record == null) {
-                call.respond(HttpStatusCode.Gone, ErrorBody(error = "claim_unknown_or_used"))
-                return@post
-            }
+      val record = claimStore.redeem(code)
+      if (record == null) {
+        call.respond(HttpStatusCode.Gone, ErrorBody(error = "claim_unknown_or_used"))
+        return@post
+      }
 
-            call.respond(
-                HttpStatusCode.OK,
-                ClaimResponse(
-                    utilityId = record.utilityId,
-                    encryptedRefreshBlob = record.encryptedRefreshBlob,
-                    proxyToken = record.proxyToken,
-                    subscriptionUri = record.subscriptionUri,
-                    scope = record.scope,
-                    currentApiVersion = currentApiVersion,
-                ),
-            )
-        }
+      call.respond(
+        HttpStatusCode.OK,
+        ClaimResponse(
+          utilityId = record.utilityId,
+          encryptedRefreshBlob = record.encryptedRefreshBlob,
+          proxyToken = record.proxyToken,
+          subscriptionUri = record.subscriptionUri,
+          scope = record.scope,
+          currentApiVersion = currentApiVersion,
+        ),
+      )
     }
+  }
 }
 
 @Serializable
 data class ClaimResponse(
-    val utilityId: String,
-    val encryptedRefreshBlob: String,
-    val proxyToken: String,
-    val subscriptionUri: String? = null,
-    val scope: String? = null,
-    val currentApiVersion: String,
+  val utilityId: String,
+  val encryptedRefreshBlob: String,
+  val proxyToken: String,
+  val subscriptionUri: String? = null,
+  val scope: String? = null,
+  val currentApiVersion: String,
 )
 
 @Serializable
