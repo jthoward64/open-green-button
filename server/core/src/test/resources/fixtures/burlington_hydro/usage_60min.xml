@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Anonymized derivative of a real Burlington Hydro "Download My Data" feed
+  (Electricity 60-minute, ~1 week). Trimmed to 2 IntervalBlocks × 3 readings each so the
+  fixture stays small while still exercising:
+    * UsagePoint + ServiceCategory + status
+    * MeterReading (empty content)
+    * Multiple IntervalBlocks each with multiple IntervalReadings
+    * ReadingType with all 12 scalar fields
+    * LocalTimeParameters
+
+  Identifiers (RetailCustomer UUID, UsagePoint UUID, MeterReading UUID, IntervalBlock UUIDs,
+  hostnames) are synthetic. Reading values are rounded to the nearest 100 Wh. The XML
+  structure — namespaces, element ordering, empty elements, line breaks — mirrors what the
+  utility actually emits, so the parser sees the real wire shape.
+-->
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<id>urn:uuid:00000000-0000-4000-8000-00000000000a</id>
+<link href="https://cert.greenbuttonalliance.org/certificate/00000000-0000-4000-8000-00000000000b" type="text/xml" rel="related"/>
+<title>Green Button Usage Feed</title>
+<updated>2026-03-02T22:11:10Z</updated>
+<link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/Batch/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002" type="espi-entry/UsagePoint" rel="self"/>
+<entry xmlns:espi="http://naesb.org/espi" xmlns="http://www.w3.org/2005/Atom">
+    <id>urn:uuid:00000000-0000-4000-8000-000000000002</id>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint" rel="up" type="espi-feed/UsagePoint"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002" rel="self" type="espi-entry/UsagePoint"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003" rel="related" type="espi-entry/MeterReading"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/LocalTimeParameters/100000000001" rel="related" type="espi-entry/LocalTimeParameters"/>
+    <title></title>
+    <content>
+        <espi:UsagePoint>
+            <espi:ServiceCategory>
+                <espi:kind>0</espi:kind>
+            </espi:ServiceCategory>
+            <espi:status>1</espi:status>
+        </espi:UsagePoint>
+    </content>
+    <published>2015-11-26T00:00:00Z</published>
+    <updated>2015-11-26T00:00:00Z</updated>
+</entry>
+
+<entry xmlns:espi="http://naesb.org/espi" xmlns="http://www.w3.org/2005/Atom">
+    <id>urn:uuid:00000000-0000-4000-8000-000000000010</id>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/LocalTimeParameters" rel="up" type="espi-feed/LocalTimeParameters"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/LocalTimeParameters/100000000001" rel="self" type="espi-entry/LocalTimeParameters"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002" rel="related" type="espi-entry/UsagePoint"/>
+    <title>EST</title>
+    <content>
+        <espi:LocalTimeParameters>
+            <espi:dstEndRule>B40E2000</espi:dstEndRule>
+            <espi:dstOffset>3600</espi:dstOffset>
+            <espi:dstStartRule>360E2000</espi:dstStartRule>
+            <espi:tzOffset>-18000</espi:tzOffset>
+        </espi:LocalTimeParameters>
+    </content>
+    <published>2021-04-20T19:34:18Z</published>
+    <updated>2021-04-20T19:34:18Z</updated>
+</entry>
+
+<entry xmlns:espi="http://naesb.org/espi" xmlns="http://www.w3.org/2005/Atom">
+    <id>urn:uuid:00000000-0000-4000-8000-000000000003</id>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading" rel="up" type="espi-feed/MeterReading"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003" rel="self" type="espi-entry/MeterReading"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002" rel="related" type="espi-entry/UsagePoint"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003/IntervalBlock" rel="related" type="espi-feed/IntervalBlock"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/ReadingType/100001" rel="related" type="espi-entry/ReadingType"/>
+    <title></title>
+    <content>
+        <espi:MeterReading/>
+    </content>
+    <published>2026-03-02T22:08:32Z</published>
+    <updated>2026-03-02T22:08:32Z</updated>
+</entry>
+
+<entry xmlns:espi="http://naesb.org/espi" xmlns="http://www.w3.org/2005/Atom">
+    <id>urn:uuid:00000000-0000-4000-8000-000000000020</id>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003/IntervalBlock" rel="up" type="espi-feed/IntervalBlock"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003/IntervalBlock/00000000-0000-4000-8000-000000000020" rel="self" type="espi-entry/IntervalBlock"/>
+    <link href="https://cert.greenbuttonalliance.org/certificate/00000000-0000-4000-8000-00000000000b" rel="related" type="text/xml"/>
+    <title></title>
+    <content>
+        <espi:IntervalBlock>
+            <espi:interval>
+                <espi:duration>86400</espi:duration>
+                <espi:start>1771909200</espi:start>
+            </espi:interval>
+            <espi:IntervalReading>
+                <espi:timePeriod>
+                    <espi:duration>3600</espi:duration>
+                    <espi:start>1771909200</espi:start>
+                </espi:timePeriod>
+                <espi:value>1000</espi:value>
+            </espi:IntervalReading>
+            <espi:IntervalReading>
+                <espi:timePeriod>
+                    <espi:duration>3600</espi:duration>
+                    <espi:start>1771912800</espi:start>
+                </espi:timePeriod>
+                <espi:value>900</espi:value>
+            </espi:IntervalReading>
+            <espi:IntervalReading>
+                <espi:timePeriod>
+                    <espi:duration>3600</espi:duration>
+                    <espi:start>1771916400</espi:start>
+                </espi:timePeriod>
+                <espi:value>800</espi:value>
+            </espi:IntervalReading>
+        </espi:IntervalBlock>
+    </content>
+    <published>2026-02-24T05:00:00Z</published>
+    <updated>2026-03-02T22:08:34Z</updated>
+</entry>
+
+<entry xmlns:espi="http://naesb.org/espi" xmlns="http://www.w3.org/2005/Atom">
+    <id>urn:uuid:00000000-0000-4000-8000-000000000021</id>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003/IntervalBlock" rel="up" type="espi-feed/IntervalBlock"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003/IntervalBlock/00000000-0000-4000-8000-000000000021" rel="self" type="espi-entry/IntervalBlock"/>
+    <link href="https://cert.greenbuttonalliance.org/certificate/00000000-0000-4000-8000-00000000000b" rel="related" type="text/xml"/>
+    <title></title>
+    <content>
+        <espi:IntervalBlock>
+            <espi:interval>
+                <espi:duration>86400</espi:duration>
+                <espi:start>1771995600</espi:start>
+            </espi:interval>
+            <espi:IntervalReading>
+                <espi:timePeriod>
+                    <espi:duration>3600</espi:duration>
+                    <espi:start>1771995600</espi:start>
+                </espi:timePeriod>
+                <espi:value>1600</espi:value>
+            </espi:IntervalReading>
+            <espi:IntervalReading>
+                <espi:timePeriod>
+                    <espi:duration>3600</espi:duration>
+                    <espi:start>1771999200</espi:start>
+                </espi:timePeriod>
+                <espi:value>1300</espi:value>
+            </espi:IntervalReading>
+            <espi:IntervalReading>
+                <espi:timePeriod>
+                    <espi:duration>3600</espi:duration>
+                    <espi:start>1772002800</espi:start>
+                </espi:timePeriod>
+                <espi:value>900</espi:value>
+            </espi:IntervalReading>
+        </espi:IntervalBlock>
+    </content>
+    <published>2026-02-25T05:00:00Z</published>
+    <updated>2026-03-02T22:08:34Z</updated>
+</entry>
+
+<entry xmlns:espi="http://naesb.org/espi" xmlns="http://www.w3.org/2005/Atom">
+    <id>urn:uuid:00000000-0000-4000-8000-000000000030</id>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/ReadingType" rel="up" type="espi-feed/ReadingType"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/ReadingType/100001" rel="self" type="espi-entry/ReadingType"/>
+    <link href="https://greenbuttondata.example-utility.invalid/espi/1_1/resource/RetailCustomer/00000000-0000-4000-8000-000000000001/UsagePoint/00000000-0000-4000-8000-000000000002/MeterReading/00000000-0000-4000-8000-000000000003" rel="related" type="espi-entry/MeterReading"/>
+    <title>WH</title>
+    <content>
+        <espi:ReadingType>
+            <espi:accumulationBehaviour>4</espi:accumulationBehaviour>
+            <espi:commodity>1</espi:commodity>
+            <espi:currency>124</espi:currency>
+            <espi:dataQualifier>12</espi:dataQualifier>
+            <espi:defaultQuality>0</espi:defaultQuality>
+            <espi:flowDirection>1</espi:flowDirection>
+            <espi:intervalLength>3600</espi:intervalLength>
+            <espi:kind>12</espi:kind>
+            <espi:phase>0</espi:phase>
+            <espi:powerOfTenMultiplier>0</espi:powerOfTenMultiplier>
+            <espi:timeAttribute>0</espi:timeAttribute>
+            <espi:uom>72</espi:uom>
+        </espi:ReadingType>
+    </content>
+    <published>2013-04-04T03:35:38Z</published>
+    <updated>2013-04-04T03:35:38Z</updated>
+</entry>
+</feed>
