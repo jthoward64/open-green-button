@@ -25,12 +25,14 @@ import org.opengb.oauth.OAuthClient
 import org.opengb.oauth.StateStore
 import org.opengb.observability.installAccessLog
 import org.opengb.proxy.TokenCrypto
+import org.opengb.proxy.UsageClient
 import org.opengb.routes.installCanonicalHost
 import org.opengb.routes.installClaim
 import org.opengb.routes.installConnect
 import org.opengb.routes.installLanding
 import org.opengb.routes.installLiveness
 import org.opengb.routes.installNotify
+import org.opengb.routes.installProxyUsage
 import org.opengb.routes.installUtilities
 import org.opengb.utility.UtilityRegistry
 import java.time.Duration
@@ -48,6 +50,7 @@ data class AppDeps(
   val stateStore: StateStore,
   val claimStore: ClaimStore,
   val oauth: OAuthClient,
+  val usageClient: UsageClient,
 )
 
 fun buildAppDeps(
@@ -60,7 +63,8 @@ fun buildAppDeps(
   val claimStore = ClaimStore(ttl = Duration.ofSeconds(config.state.claimCodeTtlSeconds))
   val httpClient = http ?: HttpClient(CIO)
   val oauth = OAuthClient(httpClient)
-  return AppDeps(config, crypto, registry, stateStore, claimStore, oauth)
+  val usageClient = UsageClient(httpClient)
+  return AppDeps(config, crypto, registry, stateStore, claimStore, oauth, usageClient)
 }
 
 /**
@@ -97,6 +101,7 @@ val opengbModule =
       }
     }
     bind<OAuthClient> { singleton { OAuthClient(instance()) } }
+    bind<UsageClient> { singleton { UsageClient(instance()) } }
     bind<AppDeps> {
       singleton {
         AppDeps(
@@ -106,6 +111,7 @@ val opengbModule =
           stateStore = instance(),
           claimStore = instance(),
           oauth = instance(),
+          usageClient = instance(),
         )
       }
     }
@@ -158,4 +164,5 @@ internal fun Application.appModule(deps: AppDeps) {
   installClaim(deps.claimStore)
   installNotify(deps.registry)
   installUtilities(deps.registry)
+  installProxyUsage(deps, deps.usageClient)
 }
