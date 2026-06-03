@@ -42,8 +42,10 @@ class UsageClient(private val http: HttpClient) {
 
     if (response.status != HttpStatusCode.OK) {
       val body = response.bodyAsText().take(MAX_ERROR_SNIPPET)
+      // Surface the full URL — including any published-min/max we appended — so a 4xx body
+      // that's empty or non-informative still tells us exactly what shape we asked for.
       throw UsageClientException(
-        "Resource server returned ${response.status.value} for $subscriptionUri: $body",
+        "Resource server returned ${response.status.value} for $url: $body",
         statusCode = response.status.value,
       )
     }
