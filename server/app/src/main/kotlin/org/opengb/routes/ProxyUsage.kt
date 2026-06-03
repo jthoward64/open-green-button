@@ -78,6 +78,7 @@ private suspend fun RoutingContext.handleProxyUsage(
 
   val refreshed = call.refreshAccessToken(deps, utility, blob.refreshToken) ?: return
   val xml = call.fetchUsage(usageClient, subscriptionUri, refreshed.accessToken, request) ?: return
+  call.maybeLogRawXml(blob.utilityId, subscriptionUri, xml)
   val normalized = call.parseAndNormalize(xml) ?: return
 
   val newCredentials = rotatedCredentials(deps.crypto, blob, refreshed.refreshToken)
@@ -197,3 +198,26 @@ private suspend fun ApplicationCall.respondError(
 // good." RFC 6749 §5.2 maps these to invalid_grant/invalid_client/access_denied.
 @Suppress("MagicNumber")
 private val AUTH_REJECTED_STATUSES = setOf(400, 401, 403)
+
+// Opt-in debug header for surfacing the raw upstream ESPI XML into the server's stdout log,
+// truncated. Useful when an integration's response looks anaemic (empty readings, missing
+// usage points, etc.) and we want to diff against what the utility actually sent. Gated on
+// a header — bytes are not logged unless the caller explicitly asks — but note that XML
+// bodies are real customer usage data on production utilities, so use sparingly.
+private const val DEBUG_HEADER = "OpenGB-Debug"
+private const val DEBUG_RAW_XML_FLAG = "raw-xml"
+private const val MAX_DEBUG_XML_LENGTH = 10_240
+
+private fun ApplicationCall.maybeLogRawXml(
+  utilityId: String,
+  subscriptionUri: String,
+  xml: String,
+) {
+  val flags = request.headers[DEBUG_HEADER] ?: return
+  val asked = flags.split(',').any { it.trim().equals(DEBUG_RAW_XML_FLAG, ignoreCase = true) }
+  if (!asked) return
+  application.environment.log.info(
+    "OpenGB-Debug:raw-xml utility=$utilityId subscriptionUri=$subscriptionUri " +
+      "xmlLength=${xml.length} xml=${xml.take(MAX_DEBUG_XML_LENGTH)}",
+  )
+}
