@@ -206,7 +206,11 @@ private val AUTH_REJECTED_STATUSES = setOf(400, 401, 403)
 // bodies are real customer usage data on production utilities, so use sparingly.
 private const val DEBUG_HEADER = "OpenGB-Debug"
 private const val DEBUG_RAW_XML_FLAG = "raw-xml"
-private const val MAX_DEBUG_XML_LENGTH = 10_240
+
+// 64 KB is enough to fit a realistic ESPI batch feed (Burlington's real data was ~120 KB for
+// a week of hourly readings; the test lab's summary-only feed is ~13 KB). Logged inline in
+// the structured access log — Fly handles long lines fine.
+private const val MAX_DEBUG_XML_LENGTH = 65_536
 
 private fun ApplicationCall.maybeLogRawXml(
   utilityId: String,
