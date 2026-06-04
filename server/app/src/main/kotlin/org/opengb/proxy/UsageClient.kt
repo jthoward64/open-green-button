@@ -8,6 +8,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
+import kotlin.time.Instant
 
 /**
  * Thin GET against an ESPI resource server — typically the `subscription_uri` returned in
@@ -22,9 +23,12 @@ class UsageClient(private val http: HttpClient) {
   suspend fun fetch(
     subscriptionUri: String,
     accessToken: String,
-    publishedMin: Long? = null,
-    publishedMax: Long? = null,
+    publishedMin: Instant? = null,
+    publishedMax: Instant? = null,
   ): String {
+    // Burlington Hydro's test-lab harness wants ISO 8601 with a `Z` suffix
+    // (e.g. `2026-02-24T05:00:00Z`); `Instant.toString()` produces exactly that for
+    // UTC instants, which is all kotlin.time.Instant ever is.
     val url =
       URLBuilder(subscriptionUri)
         .apply {

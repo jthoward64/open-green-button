@@ -25,6 +25,7 @@ import org.opengb.proxy.toResponse
 import org.opengb.utility.UnknownUtilityException
 import org.opengb.utility.UtilityProfile
 import org.opengb.utility.UtilityRegistry
+import kotlin.time.Instant
 
 /**
  * `POST /proxy/usage` — pulls a window of ESPI usage data on behalf of the HA client.
@@ -50,10 +51,12 @@ fun Application.installProxyUsage(
 @Serializable
 data class ProxyUsageRequest(
   val encryptedRefreshBlob: String,
-  /** ESPI `published-min` filter, epoch seconds. */
-  val publishedMin: Long? = null,
-  /** ESPI `published-max` filter, epoch seconds. */
-  val publishedMax: Long? = null,
+  /** ESPI `published-min` filter. JSON wire form is ISO 8601 with `Z` suffix, e.g.
+   *  `2026-02-24T05:00:00Z` — kotlinx-serialization's built-in [Instant] serializer
+   *  parses/emits that format. */
+  val publishedMin: Instant? = null,
+  /** ESPI `published-max` filter — same wire format. */
+  val publishedMax: Instant? = null,
 )
 
 private suspend fun RoutingContext.handleProxyUsage(

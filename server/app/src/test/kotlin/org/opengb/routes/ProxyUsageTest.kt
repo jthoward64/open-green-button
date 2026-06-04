@@ -37,6 +37,7 @@ import org.opengb.proxy.TokenCrypto
 import org.opengb.utility.TokenAuthStyle
 import org.opengb.utility.UtilityProfile
 import java.util.Base64
+import kotlin.time.Instant
 
 /**
  * End-to-end test of `POST /proxy/usage` against a Ktor MockEngine that fakes:
@@ -127,21 +128,24 @@ val ProxyUsageTest by testSuite {
     }
   }
 
-  test("forwards published-min/max to the resource server") {
-    var capturedUrl: String? = null
-    runProxyUsage(captureResourceRequest = { capturedUrl = it.url.toString() }) { client, ctx ->
+  test("forwards published-min/max to the resource server as ISO 8601 with Z suffix") {
+    var capturedUrl: io.ktor.http.Url? = null
+    runProxyUsage(captureResourceRequest = { capturedUrl = it.url }) { client, ctx ->
       val resp =
         client.postProxyUsage(
           ctx.proxyToken,
           ctx.encryptedBlob,
-          publishedMin = 1771900000L,
-          publishedMax = 1772000000L,
+          publishedMin = Instant.parse("2024-02-23T05:00:00Z"),
+          publishedMax = Instant.parse("2026-02-24T05:00:00Z"),
         )
       assert(resp.status == HttpStatusCode.OK)
     }
-    val url = capturedUrl ?: error("resource server was not called")
-    assert(url.contains("published-min=1771900000")) { url }
-    assert(url.contains("published-max=1772000000")) { url }
+    // Parse the URL rather than substring-match on the raw string: Ktor's URLBuilder may
+    // percent-encode the colons in the ISO timestamp, and we want to assert the decoded
+    // value regardless of which encoding it picks.
+    val parsed = capturedUrl ?: error("resource server was not called")
+    assert(parsed.parameters["published-min"] == "2024-02-23T05:00:00Z") { parsed.toString() }
+    assert(parsed.parameters["published-max"] == "2026-02-24T05:00:00Z") { parsed.toString() }
   }
 }
 
@@ -154,18 +158,28 @@ private data class ProxyUsageCtx(
   val proxyToken: String,
 )
 
+// Json instance configured to match the server's appModule — encodeDefaults=false keeps
+// the omitted publishedMin/publishedMax out of the wire when callers don't set them.
+private val testJson = Json { encodeDefaults = false }
+
 private suspend fun HttpClient.postProxyUsage(
   presentedToken: String,
   encryptedBlob: String,
-  publishedMin: Long? = null,
-  publishedMax: Long? = null,
+  publishedMin: Instant? = null,
+  publishedMax: Instant? = null,
 ): HttpResponse =
   post("/proxy/usage") {
     header(HttpHeaders.Authorization, "Bearer $presentedToken")
     contentType(ContentType.Application.Json)
-    val sinceClause = publishedMin?.let { ",\"publishedMin\":$it" } ?: ""
-    val untilClause = publishedMax?.let { ",\"publishedMax\":$it" } ?: ""
-    setBody("""{"encryptedRefreshBlob":"$encryptedBlob"$sinceClause$untilClause}""")
+    setBody(
+      testJson.encodeToString(
+        ProxyUsageRequest(
+          encryptedRefreshBlob = encryptedBlob,
+          publishedMin = publishedMin,
+          publishedMax = publishedMax,
+        ),
+      ),
+    )
   }
 
 private val responseJson = Json { ignoreUnknownKeys = true }
