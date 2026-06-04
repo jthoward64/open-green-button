@@ -128,6 +128,26 @@ val ProxyUsageTest by testSuite {
     }
   }
 
+  test("400 invalid_request when publishedMin is sent as a JSON number instead of a string") {
+    runProxyUsage { client, ctx ->
+      // Hand-rolled body: the typed helper would refuse to construct an Instant from an Int,
+      // but a misbehaving caller (or an HA integration that wasn't updated for the ISO
+      // wire-format change) might send the legacy epoch-seconds shape we used to accept.
+      val resp =
+        client.post("/proxy/usage") {
+          header(HttpHeaders.Authorization, "Bearer ${ctx.proxyToken}")
+          contentType(ContentType.Application.Json)
+          setBody("""{"encryptedRefreshBlob":"${ctx.encryptedBlob}","publishedMin":1708664400}""")
+        }
+      assert(resp.status == HttpStatusCode.BadRequest) { resp.bodyAsText() }
+      val body = resp.bodyAsText()
+      assert(body.contains("invalid_request")) { body }
+      // The underlying SerializationException message names the field so the caller can fix
+      // their wire format without going round-trips through us.
+      assert(body.contains("publishedMin", ignoreCase = true)) { body }
+    }
+  }
+
   test("forwards published-min/max to the resource server as ISO 8601 with Z suffix") {
     var capturedUrl: io.ktor.http.Url? = null
     runProxyUsage(captureResourceRequest = { capturedUrl = it.url }) { client, ctx ->

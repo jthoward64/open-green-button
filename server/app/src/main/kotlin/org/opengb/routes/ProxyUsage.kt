@@ -4,13 +4,13 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import org.opengb.AppDeps
 import org.opengb.espi.EspiNormalizer
 import org.opengb.espi.EspiParser
@@ -97,8 +97,12 @@ private fun ApplicationCall.bearerToken(): String? {
 private suspend fun ApplicationCall.parseRequest(): ProxyUsageRequest? =
   try {
     receive<ProxyUsageRequest>()
-  } catch (e: SerializationException) {
-    respondError(HttpStatusCode.BadRequest, "invalid_request", e.message)
+  } catch (e: BadRequestException) {
+    // ContentNegotiation wraps the converter's failure (kotlinx-serialization throwing on
+    // a malformed body, missing required field, or type mismatch like a JSON number where
+    // an Instant was expected) in BadRequestException — the original SerializationException
+    // is the `cause`. Surface its message so the client sees what was actually wrong.
+    respondError(HttpStatusCode.BadRequest, "invalid_request", e.cause?.message ?: e.message)
     null
   }
 
