@@ -7,7 +7,6 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -19,7 +18,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.headersOf
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.runBlocking
@@ -31,7 +29,6 @@ import org.opengb.config.CryptoConfig
 import org.opengb.config.LandingConfig
 import org.opengb.config.ServerConfig
 import org.opengb.config.StateConfig
-import org.opengb.proxy.ProxyUsageResponse
 import org.opengb.proxy.RefreshBlob
 import org.opengb.proxy.TokenCrypto
 import org.opengb.utility.TokenAuthStyle
@@ -44,69 +41,57 @@ import kotlin.time.Instant
  *   - the utility's token endpoint (refresh grant)
  *   - the utility's resource endpoint (returns a small ESPI Atom feed)
  *
- * The point isn't to re-cover what [org.opengb.espi.EspiParserTest] / EspiNormalizerTest
- * already prove about parsing — it's the wire glue: auth verification, decrypt → refresh →
- * fetch → normalize → DTO mapping, plus the refresh-token-rotation surface.
+ * After the move to pure streaming pass-through, this test no longer covers XML parsing or
+ * normalization — those moved to the HA client. The interesting behaviour here is the auth
+ * + refresh + stream-the-body-verbatim wire glue, plus the rotated-credentials surface that
+ * now flows via response **headers** rather than a JSON envelope.
  */
 val ProxyUsageTest by testSuite {
-  test("happy path: returns normalized usage DTO for a valid blob + proxy token") {
+  test("happy path: streams the upstream Atom XML through verbatim") {
     runProxyUsage { client, ctx ->
       val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
       assert(resp.status == HttpStatusCode.OK) { "got ${resp.status}: ${resp.bodyAsText()}" }
-      val payload = decodePayload(resp.bodyAsText())
-
-      assert(payload.updated == "2026-06-02T20:00:00Z") { payload.updated.toString() }
-      assert(payload.usagePoints.size == 1) { payload.usagePoints.size.toString() }
-
-      val up = payload.usagePoints.single()
-      assert(up.usagePointId == "up1") { up.usagePointId }
-      assert(up.serviceKind == "ELECTRICITY")
-      assert(up.series.size == 1)
-
-      val series = up.series.single()
-      assert(series.meterReadingId == "mr1")
-      assert(series.readingType.commodity == "ELECTRICITY_SECONDARY_METERED")
-      assert(series.readingType.flowDirection == "FORWARD")
-      assert(series.readingType.accumulationBehaviour == "DELTA_DATA")
-      assert(series.readingType.unitOfMeasure == "WATT_HOURS")
-      assert(series.readingType.unitOfMeasureSymbol == "Wh")
-      assert(series.readingType.intervalLengthSeconds == 3600L)
-      assert(series.readingType.powerOfTenMultiplier == 0)
-
-      assert(series.readings.size == 2)
-      assert(series.readings[0].start == "2026-02-24T05:00:00Z") { series.readings[0].start }
-      assert(series.readings[0].durationSeconds == 3600L)
-      assert(series.readings[0].value == 1000.0)
-      assert(series.readings[1].value == 1500.0)
-
-      // No rotation in the happy-path mock token response, so newCredentials is absent.
-      assert(payload.newCredentials == null)
+      assert(resp.headers[HttpHeaders.ContentType]?.startsWith("application/atom+xml") == true) {
+        resp.headers[HttpHeaders.ContentType].toString()
+      }
+      val body = resp.bodyAsText()
+      // The fake upstream returned MOCK_USAGE_FEED — assert we pass it through byte-for-byte
+      // (whitespace and all) rather than re-emit a parsed form.
+      assert(body == MOCK_USAGE_FEED) {
+        "body did not round-trip verbatim:\n--- got ---\n$body\n--- expected ---\n$MOCK_USAGE_FEED"
+      }
+      assert(resp.headers[HEADER_NEW_ENCRYPTED_REFRESH_BLOB] == null)
+      assert(resp.headers[HEADER_NEW_PROXY_TOKEN] == null)
     }
   }
 
-  test("returns newCredentials when the utility rotates the refresh token") {
+  test("surfaces rotated credentials via response headers (not the body)") {
     runProxyUsage(refreshTokenInResponse = "rt_rotated_value") { client, ctx ->
       val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
       assert(resp.status == HttpStatusCode.OK)
-      val payload = decodePayload(resp.bodyAsText())
-      val rotated =
-        payload.newCredentials
-          ?: error("expected newCredentials when the refresh token rotated; payload=$payload")
+      val rotatedBlob =
+        resp.headers[HEADER_NEW_ENCRYPTED_REFRESH_BLOB]
+          ?: error("expected $HEADER_NEW_ENCRYPTED_REFRESH_BLOB header when refresh token rotated")
+      val rotatedToken =
+        resp.headers[HEADER_NEW_PROXY_TOKEN]
+          ?: error("expected $HEADER_NEW_PROXY_TOKEN header when refresh token rotated")
 
-      // The rotated blob decrypts to the new refresh token, and the new proxy_token derives
-      // from it — so HA can swap to the new pair without coordinating with the server.
       val crypto = TokenCrypto(ctx.config.crypto)
-      val newBlob = crypto.decrypt(rotated.encryptedRefreshBlob)
+      val newBlob = crypto.decrypt(rotatedBlob)
       assert(newBlob.refreshToken == "rt_rotated_value")
       assert(newBlob.utilityId == ctx.utility.id)
       assert(newBlob.subscriptionUri == ctx.subscriptionUri)
-      assert(crypto.deriveProxyToken(newBlob) == rotated.proxyToken)
+      assert(crypto.deriveProxyToken(newBlob) == rotatedToken)
+
+      // Body is still the upstream XML — credentials don't pollute it.
+      assert(resp.bodyAsText() == MOCK_USAGE_FEED)
     }
   }
 
   test("401 invalid_credentials when the proxy token doesn't match the blob") {
     runProxyUsage { client, ctx ->
-      val resp = client.postProxyUsage(presentedToken = "definitely-not-the-right-token", ctx.encryptedBlob)
+      val resp =
+        client.postProxyUsage(presentedToken = "definitely-not-the-right-token", ctx.encryptedBlob)
       assert(resp.status == HttpStatusCode.Unauthorized) { resp.bodyAsText() }
       assert(resp.bodyAsText().contains("invalid_credentials"))
     }
@@ -130,9 +115,6 @@ val ProxyUsageTest by testSuite {
 
   test("400 invalid_request when publishedMin is sent as a JSON number instead of a string") {
     runProxyUsage { client, ctx ->
-      // Hand-rolled body: the typed helper would refuse to construct an Instant from an Int,
-      // but a misbehaving caller (or an HA integration that wasn't updated for the ISO
-      // wire-format change) might send the legacy epoch-seconds shape we used to accept.
       val resp =
         client.post("/proxy/usage") {
           header(HttpHeaders.Authorization, "Bearer ${ctx.proxyToken}")
@@ -142,8 +124,6 @@ val ProxyUsageTest by testSuite {
       assert(resp.status == HttpStatusCode.BadRequest) { resp.bodyAsText() }
       val body = resp.bodyAsText()
       assert(body.contains("invalid_request")) { body }
-      // The underlying SerializationException message names the field so the caller can fix
-      // their wire format without going round-trips through us.
       assert(body.contains("publishedMin", ignoreCase = true)) { body }
     }
   }
@@ -160,9 +140,6 @@ val ProxyUsageTest by testSuite {
         )
       assert(resp.status == HttpStatusCode.OK)
     }
-    // Parse the URL rather than substring-match on the raw string: Ktor's URLBuilder may
-    // percent-encode the colons in the ISO timestamp, and we want to assert the decoded
-    // value regardless of which encoding it picks.
     val parsed = capturedUrl ?: error("resource server was not called")
     assert(parsed.parameters["published-min"] == "2024-02-23T05:00:00Z") { parsed.toString() }
     assert(parsed.parameters["published-max"] == "2026-02-24T05:00:00Z") { parsed.toString() }
@@ -178,8 +155,6 @@ private data class ProxyUsageCtx(
   val proxyToken: String,
 )
 
-// Json instance configured to match the server's appModule — encodeDefaults=false keeps
-// the omitted publishedMin/publishedMax out of the wire when callers don't set them.
 private val testJson = Json { encodeDefaults = false }
 
 private suspend fun HttpClient.postProxyUsage(
@@ -201,11 +176,6 @@ private suspend fun HttpClient.postProxyUsage(
       ),
     )
   }
-
-private val responseJson = Json { ignoreUnknownKeys = true }
-
-private fun decodePayload(body: String): ProxyUsageResponse =
-  responseJson.decodeFromString(ProxyUsageResponse.serializer(), body)
 
 @Suppress("LongMethod", "LongParameterList")
 private fun runProxyUsage(
@@ -286,11 +256,7 @@ private fun runProxyUsage(
   runBlocking {
     testApplication {
       application { appModule(deps) }
-      val httpClient =
-        client.config {
-          install(ContentNegotiation) { json() }
-        }
-      httpClient.use { block(it, ctx) }
+      client.use { block(it, ctx) }
     }
   }
 }
@@ -328,9 +294,9 @@ private fun MockRequestHandleScope.handleMockRequest(
   else -> respondError(HttpStatusCode.NotImplemented)
 }
 
-// Minimal ESPI usage feed — UsagePoint (electricity) + MeterReading + IntervalBlock (2 hourly
-// readings) + ReadingType. Just enough to round-trip through the parser + normalizer + DTO
-// mapper. The Burlington Hydro fixture in core/test/resources already covers more entries.
+// A tiny representative ESPI feed. The proxy never inspects it — these tests only assert
+// the wire goes through verbatim — so it doesn't need to be schema-perfect, only deterministic
+// for the round-trip equality check.
 private val MOCK_USAGE_FEED =
   """
   <?xml version="1.0" encoding="UTF-8"?>
@@ -342,41 +308,6 @@ private val MOCK_USAGE_FEED =
       <id>urn:uuid:up1</id>
       <link rel="self" href="https://utility.mock/UsagePoint/up1"/>
       <content><espi:UsagePoint><espi:ServiceCategory><espi:kind>0</espi:kind></espi:ServiceCategory><espi:status>1</espi:status></espi:UsagePoint></content>
-    </entry>
-    <entry xmlns:espi="http://naesb.org/espi">
-      <id>urn:uuid:mr1</id>
-      <link rel="self" href="https://utility.mock/UsagePoint/up1/MeterReading/mr1"/>
-      <link rel="related" type="espi-entry/UsagePoint" href="https://utility.mock/UsagePoint/up1"/>
-      <link rel="related" type="espi-entry/ReadingType" href="https://utility.mock/ReadingType/rt1"/>
-      <content><espi:MeterReading/></content>
-    </entry>
-    <entry xmlns:espi="http://naesb.org/espi">
-      <id>urn:uuid:ib1</id>
-      <link rel="up" type="espi-feed/IntervalBlock" href="https://utility.mock/UsagePoint/up1/MeterReading/mr1/IntervalBlock"/>
-      <link rel="self" href="https://utility.mock/UsagePoint/up1/MeterReading/mr1/IntervalBlock/ib1"/>
-      <content><espi:IntervalBlock>
-        <espi:interval><espi:duration>7200</espi:duration><espi:start>1771909200</espi:start></espi:interval>
-        <espi:IntervalReading>
-          <espi:timePeriod><espi:duration>3600</espi:duration><espi:start>1771909200</espi:start></espi:timePeriod>
-          <espi:value>1000</espi:value>
-        </espi:IntervalReading>
-        <espi:IntervalReading>
-          <espi:timePeriod><espi:duration>3600</espi:duration><espi:start>1771912800</espi:start></espi:timePeriod>
-          <espi:value>1500</espi:value>
-        </espi:IntervalReading>
-      </espi:IntervalBlock></content>
-    </entry>
-    <entry xmlns:espi="http://naesb.org/espi">
-      <id>urn:uuid:rt1</id>
-      <link rel="self" href="https://utility.mock/ReadingType/rt1"/>
-      <content><espi:ReadingType>
-        <espi:accumulationBehaviour>4</espi:accumulationBehaviour>
-        <espi:commodity>1</espi:commodity>
-        <espi:flowDirection>1</espi:flowDirection>
-        <espi:intervalLength>3600</espi:intervalLength>
-        <espi:powerOfTenMultiplier>0</espi:powerOfTenMultiplier>
-        <espi:uom>72</espi:uom>
-      </espi:ReadingType></content>
     </entry>
   </feed>
   """.trimIndent()

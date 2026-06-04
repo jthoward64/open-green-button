@@ -53,8 +53,6 @@ powerAssert {
 }
 
 dependencies {
-  implementation(project(":core"))
-
   // Bootable bootstrap
   implementation(libs.bootable.boot)
   implementation(libs.bootable.config.common)

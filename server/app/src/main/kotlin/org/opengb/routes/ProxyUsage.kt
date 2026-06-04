@@ -1,43 +1,51 @@
 package org.opengb.routes
 
+import io.ktor.client.call.body
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 import org.opengb.AppDeps
-import org.opengb.espi.EspiNormalizer
-import org.opengb.espi.EspiParser
 import org.opengb.oauth.OAuthException
 import org.opengb.proxy.BlobDecryptionException
-import org.opengb.proxy.NewCredentialsDto
 import org.opengb.proxy.RefreshBlob
 import org.opengb.proxy.TokenCrypto
 import org.opengb.proxy.UsageClient
-import org.opengb.proxy.UsageClientException
-import org.opengb.proxy.toResponse
 import org.opengb.utility.UnknownUtilityException
 import org.opengb.utility.UtilityProfile
 import org.opengb.utility.UtilityRegistry
 import kotlin.time.Instant
 
 /**
- * `POST /proxy/usage` — pulls a window of ESPI usage data on behalf of the HA client.
+ * `POST /proxy/usage` — pure streaming pass-through.
  *
- * The request carries the encrypted refresh blob and a bearer-token proof-of-possession
- * (`proxy_token`). The server is fully stateless: each call decrypts the blob, verifies the
- * token in constant time, refreshes the utility access token, fetches the Atom feed from the
- * utility's resource server, parses + normalizes it, and returns the result.
+ * The proxy decrypts the refresh blob, refreshes the access token at the utility's token
+ * endpoint, GETs the subscription URI, and streams the upstream Atom feed body **byte for
+ * byte** into the response. No XML parsing, no normalization — those happen on the HA
+ * client. This keeps the proxy's memory footprint at O(network buffer) regardless of
+ * how much history the utility returns.
  *
- * Refresh-token rotation (RFC 6749 §6) is surfaced via `newCredentials` in the response —
- * the HA client replaces its stored values when present so the next call uses the rotated
- * token.
+ * Rotated credentials (RFC 6749 §6) are surfaced via response **headers** rather than a
+ * JSON envelope:
+ *
+ *   - `OpenGB-New-Encrypted-Refresh-Blob`
+ *   - `OpenGB-New-Proxy-Token`
+ *
+ * The HA client checks for these on every successful response and updates its config entry
+ * when present.
  */
 fun Application.installProxyUsage(
   deps: AppDeps,
@@ -58,6 +66,9 @@ data class ProxyUsageRequest(
   /** ESPI `published-max` filter — same wire format. */
   val publishedMax: Instant? = null,
 )
+
+const val HEADER_NEW_ENCRYPTED_REFRESH_BLOB: String = "OpenGB-New-Encrypted-Refresh-Blob"
+const val HEADER_NEW_PROXY_TOKEN: String = "OpenGB-New-Proxy-Token"
 
 private suspend fun RoutingContext.handleProxyUsage(
   deps: AppDeps,
@@ -80,12 +91,18 @@ private suspend fun RoutingContext.handleProxyUsage(
   }
 
   val refreshed = call.refreshAccessToken(deps, utility, blob.refreshToken) ?: return
-  val xml = call.fetchUsage(usageClient, subscriptionUri, refreshed.accessToken, request) ?: return
-  call.maybeLogRawXml(blob.utilityId, subscriptionUri, xml)
-  val normalized = call.parseAndNormalize(xml) ?: return
 
+  // Compute the rotated credentials BEFORE we start streaming. Once we begin writing the
+  // response body, headers are committed and we can no longer add OpenGB-New-* headers.
   val newCredentials = rotatedCredentials(deps.crypto, blob, refreshed.refreshToken)
-  call.respond(HttpStatusCode.OK, normalized.toResponse(newCredentials))
+
+  call.streamUsage(
+    usageClient,
+    subscriptionUri,
+    refreshed.accessToken,
+    request,
+    newCredentials,
+  )
 }
 
 private fun ApplicationCall.bearerToken(): String? {
@@ -151,47 +168,64 @@ private suspend fun ApplicationCall.refreshAccessToken(
     null
   }
 
-private suspend fun ApplicationCall.fetchUsage(
-  client: UsageClient,
-  subscriptionUri: String,
-  accessToken: String,
-  request: ProxyUsageRequest,
-): String? =
-  try {
-    client.fetch(
-      subscriptionUri = subscriptionUri,
-      accessToken = accessToken,
-      publishedMin = request.publishedMin,
-      publishedMax = request.publishedMax,
-    )
-  } catch (e: UsageClientException) {
-    respondError(HttpStatusCode.BadGateway, "utility_upstream_error", e.message)
-    null
-  }
-
-// xmlutil and our normalizer can throw a wide variety of RuntimeException subtypes —
-// SerializationException, XmlException, IllegalArgumentException, IndexOutOfBoundsException.
-// We never want a parse failure to escape as 500: that hides the real problem (utility
-// returned non-ESPI XML) and tells HA the proxy itself is broken when it isn't.
-@Suppress("TooGenericExceptionCaught")
-private suspend fun ApplicationCall.parseAndNormalize(xml: String): org.opengb.espi.NormalizedUsage? =
-  try {
-    EspiNormalizer.normalizeUsage(EspiParser.parseFeed(xml))
-  } catch (e: RuntimeException) {
-    respondError(HttpStatusCode.BadGateway, "utility_response_unparseable", e.message)
-    null
-  }
+private data class NewCredentials(val encryptedRefreshBlob: String, val proxyToken: String)
 
 private fun rotatedCredentials(
   crypto: TokenCrypto,
   oldBlob: RefreshBlob,
   newRefreshToken: String?,
-): NewCredentialsDto? {
+): NewCredentials? {
   if (newRefreshToken == null || newRefreshToken == oldBlob.refreshToken) return null
   val updated = oldBlob.copy(refreshToken = newRefreshToken)
-  return NewCredentialsDto(
+  return NewCredentials(
     encryptedRefreshBlob = crypto.encrypt(updated),
     proxyToken = crypto.deriveProxyToken(updated),
+  )
+}
+
+private suspend fun ApplicationCall.streamUsage(
+  client: UsageClient,
+  subscriptionUri: String,
+  accessToken: String,
+  request: ProxyUsageRequest,
+  newCredentials: NewCredentials?,
+) {
+  client
+    .fetch(
+      subscriptionUri = subscriptionUri,
+      accessToken = accessToken,
+      publishedMin = request.publishedMin,
+      publishedMax = request.publishedMax,
+    ).execute { upstream ->
+      if (upstream.status != HttpStatusCode.OK) {
+        handleUpstreamFailure(upstream)
+        return@execute
+      }
+      newCredentials?.let {
+        response.header(HEADER_NEW_ENCRYPTED_REFRESH_BLOB, it.encryptedRefreshBlob)
+        response.header(HEADER_NEW_PROXY_TOKEN, it.proxyToken)
+      }
+      val upstreamContentType =
+        upstream.headers[HttpHeaders.ContentType]?.let { ContentType.parse(it) }
+          ?: ESPI_ATOM_XML
+      // Materialize the upstream body within `execute { }`. True zero-buffer streaming would
+      // need a different lifecycle pattern: respondBytesWriter commits headers and lets body
+      // writing run asynchronously, but execute { } tears down the upstream channel as soon
+      // as its block returns — the two timings race and the body writer sees a cancelled
+      // source channel. For utility feeds at single-digit MB scale, holding the body in
+      // memory transiently is still ~30× cheaper than the parse-everything path that
+      // preceded this refactor (no DTO tree, no normalized model, no JSON re-encode).
+      val bytes: ByteArray = upstream.body()
+      respondBytes(bytes, upstreamContentType)
+    }
+}
+
+private suspend fun ApplicationCall.handleUpstreamFailure(upstream: HttpResponse) {
+  val body = upstream.bodyAsText().take(MAX_UPSTREAM_ERROR_SNIPPET)
+  respondError(
+    HttpStatusCode.BadGateway,
+    "utility_upstream_error",
+    "Resource server returned ${upstream.status.value}: $body",
   )
 }
 
@@ -206,29 +240,5 @@ private suspend fun ApplicationCall.respondError(
 @Suppress("MagicNumber")
 private val AUTH_REJECTED_STATUSES = setOf(400, 401, 403)
 
-// Opt-in debug header for surfacing the raw upstream ESPI XML into the server's stdout log,
-// truncated. Useful when an integration's response looks anaemic (empty readings, missing
-// usage points, etc.) and we want to diff against what the utility actually sent. Gated on
-// a header — bytes are not logged unless the caller explicitly asks — but note that XML
-// bodies are real customer usage data on production utilities, so use sparingly.
-private const val DEBUG_HEADER = "OpenGB-Debug"
-private const val DEBUG_RAW_XML_FLAG = "raw-xml"
-
-// 64 KB is enough to fit a realistic ESPI batch feed (Burlington's real data was ~120 KB for
-// a week of hourly readings; the test lab's summary-only feed is ~13 KB). Logged inline in
-// the structured access log — Fly handles long lines fine.
-private const val MAX_DEBUG_XML_LENGTH = 65_536
-
-private fun ApplicationCall.maybeLogRawXml(
-  utilityId: String,
-  subscriptionUri: String,
-  xml: String,
-) {
-  val flags = request.headers[DEBUG_HEADER] ?: return
-  val asked = flags.split(',').any { it.trim().equals(DEBUG_RAW_XML_FLAG, ignoreCase = true) }
-  if (!asked) return
-  application.environment.log.info(
-    "OpenGB-Debug:raw-xml utility=$utilityId subscriptionUri=$subscriptionUri " +
-      "xmlLength=${xml.length} xml=${xml.take(MAX_DEBUG_XML_LENGTH)}",
-  )
-}
+private val ESPI_ATOM_XML = ContentType("application", "atom+xml")
+private const val MAX_UPSTREAM_ERROR_SNIPPET = 500
