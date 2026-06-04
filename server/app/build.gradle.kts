@@ -165,7 +165,12 @@ jib {
     jvmFlags =
       listOf(
         "-XX:+UseSerialGC",
-        "-Xmx192m",
+        // Container-aware heap sizing. JVM 17+ reads the cgroup memory limit and computes
+        // heap as a percentage of it — we get 75% (≈ 384 MB on a 512 MB Fly machine), leaving
+        // the rest for metaspace, code cache, native, GC bookkeeping, and JNI buffers. Bump
+        // the Fly machine memory via `fly scale memory 512 -a open-green-button` to take
+        // effect; no rebuild needed when scaling up later.
+        "-XX:MaxRAMPercentage=75.0",
         "-XX:TieredStopAtLevel=1",
         "-Dfile.encoding=UTF-8",
       )
