@@ -1,8 +1,9 @@
 package org.opengb.routes
 
-import io.ktor.client.call.body
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.discardRemaining
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -13,10 +14,11 @@ import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondBytes
+import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import io.ktor.utils.io.copyTo
 import kotlinx.serialization.Serializable
 import org.opengb.AppDeps
 import org.opengb.oauth.OAuthException
@@ -190,42 +192,58 @@ private suspend fun ApplicationCall.streamUsage(
   request: ProxyUsageRequest,
   newCredentials: NewCredentials?,
 ) {
-  client
-    .fetch(
-      subscriptionUri = subscriptionUri,
-      accessToken = accessToken,
-      publishedMin = request.publishedMin,
-      publishedMax = request.publishedMax,
-    ).execute { upstream ->
-      if (upstream.status != HttpStatusCode.OK) {
-        handleUpstreamFailure(upstream)
-        return@execute
-      }
-      newCredentials?.let {
-        response.header(HEADER_NEW_ENCRYPTED_REFRESH_BLOB, it.encryptedRefreshBlob)
-        response.header(HEADER_NEW_PROXY_TOKEN, it.proxyToken)
-      }
-      val upstreamContentType =
-        upstream.headers[HttpHeaders.ContentType]?.let { ContentType.parse(it) }
-          ?: ESPI_ATOM_XML
-      // Materialize the upstream body within `execute { }`. True zero-buffer streaming would
-      // need a different lifecycle pattern: respondBytesWriter commits headers and lets body
-      // writing run asynchronously, but execute { } tears down the upstream channel as soon
-      // as its block returns — the two timings race and the body writer sees a cancelled
-      // source channel. For utility feeds at single-digit MB scale, holding the body in
-      // memory transiently is still ~30× cheaper than the parse-everything path that
-      // preceded this refactor (no DTO tree, no normalized model, no JSON re-encode).
-      val bytes: ByteArray = upstream.body()
-      respondBytes(bytes, upstreamContentType)
+  // `execute()` (no block variant) returns an HttpResponse we own — its body channel stays
+  // open until *we* cancel it, not when an enclosing block returns. That's the lifecycle
+  // shape `respondBytesWriter` needs: it commits headers and runs its producer (which reads
+  // from upstream) as part of the engine's body-writing phase, which can run after this
+  // function's syntactic body has handed control back to Ktor. With the `execute { block }`
+  // form, the block returns before body writing finishes and upstream gets torn down mid-
+  // copy → ClosedByteChannelException.
+  val upstream: HttpResponse =
+    client
+      .fetch(
+        subscriptionUri = subscriptionUri,
+        accessToken = accessToken,
+        publishedMin = request.publishedMin,
+        publishedMax = request.publishedMax,
+      ).execute()
+  try {
+    if (upstream.status != HttpStatusCode.OK) {
+      handleUpstreamFailure(upstream)
+      return
     }
+    newCredentials?.let {
+      response.header(HEADER_NEW_ENCRYPTED_REFRESH_BLOB, it.encryptedRefreshBlob)
+      response.header(HEADER_NEW_PROXY_TOKEN, it.proxyToken)
+    }
+    val upstreamContentType =
+      upstream.headers[HttpHeaders.ContentType]?.let { ContentType.parse(it) }
+        ?: ESPI_ATOM_XML
+
+    // True zero-buffer streaming. respondBytesWriter suspends until its producer block
+    // completes, and copyTo only returns when upstream EOFs. Combined with the explicit
+    // `execute()` (no auto-close) above, the upstream channel is alive throughout the copy.
+    respondBytesWriter(upstreamContentType) {
+      upstream.bodyAsChannel().copyTo(this)
+    }
+  } finally {
+    // Explicitly release the upstream — `discardRemaining` reads and drops any unread bytes
+    // (none in the happy path; only the 4xx/5xx error-body snippet path leaves anything),
+    // returning the connection to the client's pool. Without it the HTTP/2 stream slot
+    // leaks and a busy server eventually starves on the client connection pool.
+    runCatching { upstream.discardRemaining() }
+  }
 }
 
 private suspend fun ApplicationCall.handleUpstreamFailure(upstream: HttpResponse) {
   val body = upstream.bodyAsText().take(MAX_UPSTREAM_ERROR_SNIPPET)
+  // Include the full URL we actually sent (including any published-min/max we appended) so
+  // a 4xx body that's empty or non-informative still tells the caller exactly what shape we
+  // asked for. Without this, debugging the test lab's strict timestamp parser is guesswork.
   respondError(
     HttpStatusCode.BadGateway,
     "utility_upstream_error",
-    "Resource server returned ${upstream.status.value}: $body",
+    "Resource server returned ${upstream.status.value} for ${upstream.call.request.url}: $body",
   )
 }
 
