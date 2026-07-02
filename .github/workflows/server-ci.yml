@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - 'server/**'
+      - 'scripts/generate-native-metadata.sh'
+      - 'mise.toml'
       - '.github/workflows/server-ci.yml'
   push:
     branches: [main]
     paths:
       - 'server/**'
+      - 'scripts/generate-native-metadata.sh'
+      - 'mise.toml'
       - '.github/workflows/server-ci.yml'
 
 permissions:
@@ -57,3 +61,45 @@ jobs:
         with:
           name: server-detekt-reports
           path: server/**/build/reports/detekt/
+
+  # Guard against stale GraalVM reachability metadata. A missing reflection/resource entry only
+  # fails the native image at *runtime* (not at build time), so this job regenerates the metadata
+  # and fails if it differs from what's committed — i.e. someone changed reflection-relevant code
+  # or dependencies but didn't re-run scripts/generate-native-metadata.sh. It uses the GraalVM
+  # pinned in mise.toml (same version as local generation) to keep the agent output reproducible.
+  # Only the agent-generated dirs (from-tests/, from-app/) are checked; manual/ is hand-maintained.
+  #
+  # If this ever flags a diff that is purely environmental (CI runs on Ubuntu; metadata may have
+  # been generated on another OS) rather than a real code change, commit the CI-generated version
+  # to make this environment canonical — the authoritative correctness check remains the native
+  # image actually booting (the Docker build + a smoke test).
+  native-image-metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs the JDKs (incl. graalvm-community-21) + gradle pinned in mise.toml.
+      - uses: jdx/mise-action@v2
+
+      - name: Regenerate native-image reachability metadata
+        run: |
+          # Resolve GraalVM straight from mise (robust regardless of mise's data dir), rather than
+          # relying on the GRAALVM_HOME template in mise.toml.
+          export GRAALVM_HOME="$(mise where java@graalvm-community-21.0.2)"
+          echo "Using GraalVM at $GRAALVM_HOME"
+          ./scripts/generate-native-metadata.sh
+
+      - name: Fail if committed metadata is out of date
+        run: |
+          paths=(
+            server/app/src/main/resources/META-INF/native-image/org.opengb/from-tests
+            server/app/src/main/resources/META-INF/native-image/org.opengb/from-app
+          )
+          git add -A -- "${paths[@]}"
+          if git diff --cached --quiet -- "${paths[@]}"; then
+            echo "✓ Native-image reachability metadata is up to date."
+          else
+            echo "::error::Native-image reachability metadata is stale. Run ./scripts/generate-native-metadata.sh and commit the changes under server/app/src/main/resources/META-INF/native-image/."
+            git --no-pager diff --cached -- "${paths[@]}"
+            exit 1
+          fi

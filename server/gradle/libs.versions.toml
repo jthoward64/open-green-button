@@ -10,10 +10,11 @@ caffeine = "3.1.8"
 log4j = "2.24.1"
 log4j-kotlin = "1.5.0"
 micrometer = "1.13.6"
-bootable = "2.1.0"
+bootable = "2.2.0-SNAPSHOT"
 testBalloon = "1.0.0-K2.3.0"
 powerAssert = "2.3.0"
 jib = "3.4.5"
+graalvmNative = "0.10.6"
 detekt = "1.23.8"
 ktlint = "12.1.2"
 
@@ -86,5 +87,6 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 kotlin-power-assert = { id = "org.jetbrains.kotlin.plugin.power-assert", version.ref = "powerAssert" }
 testBalloon = { id = "de.infix.testBalloon", version.ref = "testBalloon" }
 jib = { id = "com.google.cloud.tools.jib", version.ref = "jib" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvmNative" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }

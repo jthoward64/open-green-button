@@ -1,0 +1,18 @@
+# Keep the build context small and reproducible. The Dockerfile build stage compiles from
+# source inside the GraalVM container, so host build outputs and tooling state are noise.
+.git
+.github
+.venv
+.idea
+.junie
+.claude
+docs
+
+# Gradle / build outputs — regenerated inside the container.
+**/build
+**/.gradle
+
+# Editor / OS cruft
+*.log
+.DS_Store
+node_modules
