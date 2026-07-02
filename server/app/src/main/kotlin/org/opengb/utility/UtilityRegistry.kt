@@ -14,6 +14,11 @@ class UtilityRegistry(profiles: List<UtilityProfile>) {
       val dups = profiles.groupingBy { it.id }.eachCount().filterValues { it > 1 }.keys
       "Duplicate utility id in configuration: $dups"
     }
+    // Fail fast at startup on a malformed `initialHistory` rather than 500ing later at claim time.
+    profiles.forEach { profile ->
+      runCatching { profile.initialHistorySeconds }
+        .onFailure { throw IllegalArgumentException("Utility '${profile.id}': ${it.message}", it) }
+    }
   }
 
   operator fun get(id: String): UtilityProfile? = byId[id]

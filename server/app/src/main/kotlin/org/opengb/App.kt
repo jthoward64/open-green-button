@@ -161,7 +161,7 @@ internal fun Application.appModule(deps: AppDeps) {
   installLiveness()
   installLanding(deps.config)
   installConnect(deps)
-  installClaim(deps.claimStore)
+  installClaim(deps.claimStore, deps.registry)
   installNotify(deps.registry)
   installUtilities(deps.registry)
   installProxyUsage(deps, deps.usageClient)

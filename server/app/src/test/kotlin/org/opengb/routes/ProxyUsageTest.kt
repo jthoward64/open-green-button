@@ -113,6 +113,16 @@ val ProxyUsageTest by testSuite {
     }
   }
 
+  test("202 utility_data_pending when the resource server defers a large dataset") {
+    runProxyUsage(resourceStatus = HttpStatusCode.Accepted) { client, ctx ->
+      val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
+      // Distinct from the generic 502 path: a utility 202 (async batch / "available later")
+      // is passed through as 202 with a dedicated error key the HA client keys on.
+      assert(resp.status == HttpStatusCode.Accepted) { resp.bodyAsText() }
+      assert(resp.bodyAsText().contains("utility_data_pending")) { resp.bodyAsText() }
+    }
+  }
+
   test("400 invalid_request when publishedMin is sent as a JSON number instead of a string") {
     runProxyUsage { client, ctx ->
       val resp =

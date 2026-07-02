@@ -208,6 +208,10 @@ private suspend fun ApplicationCall.streamUsage(
         publishedMax = request.publishedMax,
       ).execute()
   try {
+    if (upstream.status == HttpStatusCode.Accepted) {
+      handleUpstreamAccepted(upstream)
+      return
+    }
     if (upstream.status != HttpStatusCode.OK) {
       handleUpstreamFailure(upstream)
       return
@@ -233,6 +237,22 @@ private suspend fun ApplicationCall.streamUsage(
     // leaks and a busy server eventually starves on the client connection pool.
     runCatching { upstream.discardRemaining() }
   }
+}
+
+private suspend fun ApplicationCall.handleUpstreamAccepted(upstream: HttpResponse) {
+  // ESPI asynchronous batch delivery: the utility accepted the request but the dataset is
+  // large enough that it's being assembled out-of-band. Per spec it will later POST an ESPI
+  // Notification (a BatchList of resource URIs) to our registered NotificationURI — which we
+  // currently discard (see Notify.kt). Until that retrieval flow exists, surface a DISTINCT,
+  // machine-readable signal — passing the utility's 202 semantics through with a dedicated
+  // `utility_data_pending` error key — so the HA client can guide the user instead of looping
+  // on a generic upstream error.
+  respondError(
+    HttpStatusCode.Accepted,
+    "utility_data_pending",
+    "Utility returned 202 Accepted for ${upstream.call.request.url}: the dataset is being " +
+      "prepared asynchronously and background (async batch) delivery is not yet supported",
+  )
 }
 
 private suspend fun ApplicationCall.handleUpstreamFailure(upstream: HttpResponse) {
