@@ -36,8 +36,10 @@ detekt {
   config.setFrom(rootProject.file("../config/detekt.yml"))
 }
 
-tasks.withType<Detekt>().configureEach { jvmTarget = "21" }
-tasks.withType<DetektCreateBaselineTask>().configureEach { jvmTarget = "21" }
+// detekt's own analysis target (independent of the app's jvmToolchain(24) compile output); detekt
+// 1.23.8's bundled compiler caps --jvm-target at 22, so use that — bump to 24 when detekt supports it.
+tasks.withType<Detekt>().configureEach { jvmTarget = "22" }
+tasks.withType<DetektCreateBaselineTask>().configureEach { jvmTarget = "22" }
 
 // Don't lint generated code — testBalloon emits a JvmEntryPoint.kt under build/generated/ that
 // uses its own indent convention, which conflicts with our indent_size=2 .editorconfig.
@@ -48,7 +50,7 @@ ktlint {
 }
 
 kotlin {
-  jvmToolchain(21)
+  jvmToolchain(24)
   compilerOptions {
     freeCompilerArgs.addAll("-Xjsr305=strict")
   }
@@ -240,7 +242,7 @@ tasks.processResources {
 
 jib {
   from {
-    image = "eclipse-temurin:21-jre-jammy"
+    image = "eclipse-temurin:24-jre-noble"
     platforms {
       platform {
         architecture = "amd64"

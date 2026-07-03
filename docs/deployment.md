@@ -48,7 +48,7 @@ native build is wired up by the `org.graalvm.buildtools.native` Gradle plugin in
 fly deploy --config server/fly.toml --dockerfile Dockerfile
 ```
 
-To build the native binary locally (mise supplies GraalVM for JDK 21 via `GRAALVM_HOME` — see
+To build the native binary locally (mise supplies GraalVM for JDK 24 via `GRAALVM_HOME` — see
 `mise.toml` — so no manual setup beyond `mise install`):
 
 ```sh
@@ -75,7 +75,7 @@ for our dependencies; the app-specific remainder is committed under
   the OS-signal shutdown path that the agent can't observe. Edit by hand if shutdown-path
   reflection regresses.
 
-Regenerate `from-tests/` + `from-app/` with the helper script. It needs a **GraalVM for JDK 21**
+Regenerate `from-tests/` + `from-app/` with the helper script. It needs a **GraalVM for JDK 24**
 (for the `native-image-agent`), which mise provides via `GRAALVM_HOME` — so with mise active and
 `mise install` done, just run:
 
@@ -136,9 +136,7 @@ The server's `utilities.conf` reads these via Hoplite env substitution.
 
 ## Continuous deploy from GitHub Actions
 
-[.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `master` that touches `server/**`. It builds, tests, pushes the Jib image to `registry.fly.io/open-green-button:<sha>`, and runs `flyctl deploy` against that immutable SHA-tagged image.
-
-> The CI workflow still uses the Jib path. To cut CI over to the native image, replace the "Push image with Jib" + "Deploy to Fly" steps with a single `flyctl deploy --config server/fly.toml --dockerfile Dockerfile` run from the repo root (drop the `working-directory: server` default for that step). Note that native-image compilation is slower and more memory-hungry than a Jib build, so expect longer CI runs.
+[.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `master` that touches `server/**`, `branding/**`, or the `Dockerfile`. It runs `./gradlew build` (compile + tests) as a gate, then `flyctl deploy --config server/fly.toml --dockerfile Dockerfile --remote-only` — compiling the GraalVM **native** image on Fly's remote builder and releasing it, with `OPENGB_VERSION` stamped to the commit SHA. (Native-image compilation is slower and more memory-hungry than a JVM/Jib build, so expect longer CI runs — the payoff is the sub-second startup above.)
 
 One-time setup — generate a deploy token and store it as a repo secret:
 
@@ -156,4 +154,4 @@ The token can be rotated at any time with `fly tokens revoke` + a fresh `fly tok
 
 To deploy manually without a commit: Actions tab → "deploy" workflow → "Run workflow".
 
-To roll back: `flyctl releases --app open-green-button` to find a prior image, then `flyctl deploy --app open-green-button --image registry.fly.io/open-green-button:<old-sha>`.
+To roll back: `flyctl releases --app open-green-button` to find a prior release and its image ref, then `flyctl deploy --app open-green-button --image <image-ref>` (Fly tags native builds itself — e.g. `registry.fly.io/open-green-button:deployment-…` — rather than by commit SHA, so copy the ref from `flyctl releases` output).

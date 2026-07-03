@@ -3,35 +3,24 @@
 # Run `mise trust` once when you first cd into this repo, then `mise install`
 # to download anything you don't already have.
 #
-# Why pin JDK 21 even though we use the toolchain plugin:
-#   Gradle's own daemon runs on whatever JDK is on PATH. Gradle 8.14 does not
-#   yet understand the JDK 25 class file format, so launching `./gradlew` on
-#   JDK 25 fails with a cryptic "25.0.x" error during configuration. The
-#   `jvmToolchain(21)` declaration only governs *compilation* targets — the
-#   daemon itself needs to be on 21 too.
+# Why GraalVM for JDK 24 for everything:
+#   A single JDK runs the Gradle daemon, satisfies the project's jvmToolchain(24) compile
+#   target, and provides `native-image` + the tracing agent for :app:nativeCompile and
+#   scripts/generate-native-metadata.sh. GraalVM for JDK 23+ is required to read the unified
+#   `reachability-metadata.json` format that the bootable library bundles inside its jars
+#   (GraalVM 21 silently ignores it). JDK 24 (not 25) also keeps Gradle 8.14 happy — it can't
+#   yet run on the JDK 25 class-file format.
 #
 # Why pin Gradle 8.14.1:
-#   Matches the wrapper version in gradle/wrapper/gradle-wrapper.properties.
-#   Keeping mise in sync means a stray `gradle` command (without `./gradlew`)
-#   resolves to the same binary the wrapper would download — no "two daemons
-#   competing for the build cache" surprises.
-#
-# Why also pin graalvm-community-24:
-#   The GraalVM Native Build Tools plugin (:app:nativeCompile) and the metadata
-#   generator (scripts/generate-native-metadata.sh) need a GraalVM for `native-image`
-#   + the tracing agent. GraalVM for JDK 23+ is required to read the unified
-#   `reachability-metadata.json` format that the bootable library now bundles inside
-#   its jars (GraalVM 21 silently ignores it). It's listed SECOND so temurin-21 stays
-#   the default `java`/daemon JDK (matches CI, and Gradle 8.14 can't run on newer JDKs).
-#   GRAALVM_HOME below points the Gradle plugin at it, so native builds need no manual
-#   JAVA_HOME juggling. Bump the version here and in GRAALVM_HOME together if you upgrade.
+#   Matches the wrapper version in gradle/wrapper/gradle-wrapper.properties. Keeping mise in
+#   sync means a stray `gradle` command (without `./gradlew`) resolves to the same binary the
+#   wrapper would download — no "two daemons competing for the build cache" surprises.
 
 [tools]
-java = ["temurin-21", "graalvm-community-24.0.2"]
+java = "graalvm-community-24.0.2"
 gradle = "8.14.1"
 
 [env]
-# Where the GraalVM Native Build Tools plugin and scripts/generate-native-metadata.sh look for
-# GraalVM. Resolves to the mise-managed install of the graalvm-community-24 entry above. Only
-# native-image tasks read it; regular builds keep using the temurin daemon (JAVA_HOME).
+# The GraalVM Native Build Tools plugin auto-detects GraalVM from JAVA_HOME, but set GRAALVM_HOME
+# explicitly too so scripts/generate-native-metadata.sh and the plugin find it unambiguously.
 GRAALVM_HOME = "{{ env.HOME }}/.local/share/mise/installs/java/graalvm-community-24.0.2"

@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '24'
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -78,14 +78,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Installs the JDKs (incl. graalvm-community-21) + gradle pinned in mise.toml.
+      # Installs the JDK (graalvm-community-24) + gradle pinned in mise.toml.
       - uses: jdx/mise-action@v2
 
       - name: Regenerate native-image reachability metadata
         run: |
           # Resolve GraalVM straight from mise (robust regardless of mise's data dir), rather than
           # relying on the GRAALVM_HOME template in mise.toml.
-          export GRAALVM_HOME="$(mise where java@graalvm-community-21.0.2)"
+          export GRAALVM_HOME="$(mise where java@graalvm-community-24.0.2)"
           echo "Using GraalVM at $GRAALVM_HOME"
           ./scripts/generate-native-metadata.sh
 

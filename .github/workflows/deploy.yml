@@ -5,6 +5,9 @@ on:
     branches: [master]
     paths:
       - 'server/**'
+      - 'branding/**'
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -22,52 +25,43 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
     steps:
       - uses: actions/checkout@v4
 
+      # JDK 24 (matches jvmToolchain(24)) for the pre-deploy build & test gate. The native image
+      # itself is compiled inside the GraalVM container by the Dockerfile — no GraalVM needed here.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '24'
 
       - uses: gradle/actions/setup-gradle@v4
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # Don't deploy a broken build. `build` runs `check` which runs `test`.
+      # Don't deploy a broken build. `build` runs `check` which runs `test`. (The Dockerfile build
+      # only runs nativeCompile, not the test suite, so this is where tests gate the deploy.)
       - name: Build & test
+        working-directory: server
         run: ./gradlew build
 
-      - name: Authenticate Docker for Fly registry
-        run: flyctl auth docker
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-      - name: Push image with Jib
-        # Tags: registry.fly.io/open-green-button:<sha> and :latest. We deploy
-        # by SHA below so the deployed image is immutable; :latest is a
-        # convenience for manual `fly deploy` runs.
-        run: |
-          ./gradlew :app:jib \
-            -Popengb.image.name=registry.fly.io/open-green-button \
-            -Popengb.version=${{ github.sha }}
-
-      - name: Deploy to Fly
+      # Build the GraalVM native image from the Dockerfile on Fly's remote builder and release it.
+      # Run from the repo root: the Dockerfile's build context needs ../branding, and --config points
+      # Fly at server/fly.toml. OPENGB_VERSION stamps the build with the commit SHA.
+      - name: Deploy native image to Fly
         run: |
           flyctl deploy \
-            --app open-green-button \
-            --image registry.fly.io/open-green-button:${{ github.sha }}
+            --config server/fly.toml \
+            --dockerfile Dockerfile \
+            --remote-only \
+            --build-arg OPENGB_VERSION=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
       - name: Summarize
         if: success()
         run: |
-          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deployed (GraalVM native image)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Image: \`registry.fly.io/open-green-button:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- App: https://fly.io/apps/open-green-button" >> "$GITHUB_STEP_SUMMARY"

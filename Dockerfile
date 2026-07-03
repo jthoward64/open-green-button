@@ -12,11 +12,14 @@
 # local Docker daemon with enough memory.
 
 # ---- Build stage --------------------------------------------------------------------------
-# GraalVM for JDK 21: matches the project's jvmToolchain(21) and sidesteps the JDK 25
-# tracing-agent regression with Ktor CIO (oracle/graal#12650). native-image ships in this image,
-# and JAVA_HOME already points at GraalVM, so the Gradle plugin picks it up with no toolchain
-# download.
-FROM ghcr.io/graalvm/native-image-community:21 AS build
+# GraalVM for JDK 24: JDK 23+ is required to read the unified `reachability-metadata.json` that the
+# bootable library bundles inside its jars — GraalVM 21 silently ignores that format. native-image
+# ships in this image and JAVA_HOME points at GraalVM, so the Gradle plugin uses it for native-image
+# and the project's jvmToolchain(24) resolves to the same JDK — no extra JDK or toolchain download.
+# JDK 24 (not 25) also sidesteps the tracing-agent regression with Ktor CIO (oracle/graal#12650). The
+# mostly-static build links only baseline glibc symbols (≤ 2.34), so the binary still runs on the
+# older-glibc distroless base below.
+FROM ghcr.io/graalvm/native-image-community:24 AS build
 # findutils: the native-image driver shells out to `xargs` to assemble its (very long) argument
 #   list; the minimal Oracle Linux base doesn't ship it (build fails late with "xargs is not
 #   available").
