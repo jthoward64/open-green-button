@@ -45,15 +45,17 @@ jobs:
         working-directory: server
         run: ./gradlew build
 
-      # Build the GraalVM native image from the Dockerfile on Fly's remote builder and release it.
-      # Run from the repo root: the Dockerfile's build context needs ../branding, and --config points
-      # Fly at server/fly.toml. OPENGB_VERSION stamps the build with the commit SHA.
+      # Build the GraalVM native image from the Dockerfile and release it. `--local-only` builds on
+      # this runner's Docker daemon (16 GB RAM) rather than Fly's default remote builder, which is
+      # memory-starved and OOMs during native-image analysis (~6 GB peak needed). Run from the repo
+      # root: the Dockerfile's build context needs ../branding, and --config points Fly at
+      # server/fly.toml. OPENGB_VERSION stamps the build with the commit SHA.
       - name: Deploy native image to Fly
         run: |
           flyctl deploy \
             --config server/fly.toml \
             --dockerfile Dockerfile \
-            --remote-only \
+            --local-only \
             --build-arg OPENGB_VERSION=${{ github.sha }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
