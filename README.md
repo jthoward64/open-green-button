@@ -6,7 +6,29 @@ The hosted server is a **stateless OAuth proxy**: utilities require a stable pub
 
 ## Status
 
-🚧 **Pre-alpha.** Burlington Hydro (Ontario, Canada) is the first targeted utility. See the implementation plan in `docs/` for the phased roadmap.
+🚧 **Live!** Burlington Hydro (Ontario, Canada).
+
+### New Utility Support
+
+Request a new utility here:
+
+https://github.com/rocketraman/open-green-button/issues/new?template=new-utility-request.md
+
+#### Managed by London Hydro
+
+Burlington Hydro Green Button support is live, but implementation and verification is actually provided by London Hydro.
+London Hydro also runs Green Button support for the following utilities, so approval for these utilities will be easier than usual, as London Hydro has already reviewed the system and approved it.
+
+* ELK Energy
+* Enwin Utilities
+* Festival Hydro
+* London Hydro
+* Newmarket Tay
+* Niagara Peninsula Energy
+* Oakville Hydro
+* Oshawa Power
+
+If you use one of these utilities, use the new utility issue template to request it, and note in the issue that it is a London Hydro-managed utility.
 
 ## Components
 
