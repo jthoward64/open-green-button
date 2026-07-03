@@ -99,17 +99,6 @@ podman run --rm -p 8080:8080 opengb-native             # then: curl localhost:80
 variables containing `${...}` — e.g. exported shell functions from Lmod/environment-modules — which
 Hoplite's config loader will try to resolve and fail on. The Fly machine's environment is clean.)
 
-### JVM image via Jib (fallback)
-
-The original containerized-JVM path still works if a native build is ever blocked:
-
-```sh
-cd server
-gradle :app:jib \
-  -Popengb.image.name="registry.fly.io/open-green-button"
-fly deploy --image registry.fly.io/open-green-button:latest
-```
-
 ## Verifying scale-to-zero
 
 After 5 minutes of idle:
@@ -117,8 +106,8 @@ After 5 minutes of idle:
 ```sh
 fly status   # machine state should be "stopped"
 curl -i https://greenbutton.<your-domain>/health
-#  first request wakes the machine: ~sub-second with the native image (the JVM/Jib
-#  image takes ~5-15s on shared-cpu-1x 256MB). Subsequent calls within the keep-alive
+#  first request wakes the machine: ~sub-second with the native image (a JVM image
+#  would take ~5-15s on shared-cpu-1x 256MB). Subsequent calls within the keep-alive
 #  window respond in ms.
 ```
 
@@ -136,7 +125,7 @@ The server's `utilities.conf` reads these via Hoplite env substitution.
 
 ## Continuous deploy from GitHub Actions
 
-[.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `master` that touches `server/**`, `branding/**`, or the `Dockerfile`. It runs `./gradlew build` (compile + tests) as a gate, then `flyctl deploy --config server/fly.toml --dockerfile Dockerfile --remote-only` — compiling the GraalVM **native** image on Fly's remote builder and releasing it, with `OPENGB_VERSION` stamped to the commit SHA. (Native-image compilation is slower and more memory-hungry than a JVM/Jib build, so expect longer CI runs — the payoff is the sub-second startup above.)
+[.github/workflows/deploy.yml](../.github/workflows/deploy.yml) runs on every push to `master` that touches `server/**`, `branding/**`, or the `Dockerfile`. It runs `./gradlew build` (compile + tests) as a gate, then `flyctl deploy --config server/fly.toml --dockerfile Dockerfile --remote-only` — compiling the GraalVM **native** image on Fly's remote builder and releasing it, with `OPENGB_VERSION` stamped to the commit SHA. (Native-image compilation is slower and more memory-hungry than a plain JVM build, so expect longer CI runs — the payoff is the sub-second startup above.)
 
 One-time setup — generate a deploy token and store it as a repo secret:
 
