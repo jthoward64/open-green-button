@@ -1,13 +1,13 @@
 ---
 name: New Utility Request
 about: Request a new utility.
-title: New Utility Support Request
+title: 'Utility Support Request: <Utility Name>'
 labels: feature-utility-support
 assignees: ''
 
 ---
 
-= Utility Information
+# Utility Information
 
 Provide information about the utility here:
 
@@ -16,7 +16,7 @@ Provide information about the utility here:
 * proof that the utility supports Green Button
 * links to the Green Button sign-up forms
 
-= Contribution Support
+# Contribution Support
 
-[ ] Are you willing to work with the utility to register this integration?
-[ ] Are you willing to test integrations with this utility?
+- [x] Are you willing to work with the utility to register this integration?
+- [x] Are you willing to test integrations with this utility?
