@@ -42,6 +42,12 @@ The **Home Assistant custom integration** lives in its own repository so HACS va
 
 The hosted server holds **no per-user durable state**. Per-utility OAuth client credentials are configured globally; every other piece of state (your refresh token, your usage data) lives only on your Home Assistant instance.
 
+## Community
+
+Discuss the add-on, ask questions, and share feedback on the Home Assistant community forum:
+
+https://community.home-assistant.io/t/utility-energy-data-integration-via-green-button-connect/1016031
+
 ## Support
 
 Open Green Button is free to use. If it saves you time or you'd like to help keep it maintained and hosted (there's a small Fly.io bill and ongoing time spent adding new utilities and keeping up with Home Assistant changes), donations are welcome.
