@@ -11,36 +11,71 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import kotlinx.html.HTML
+import kotlinx.html.a
 import kotlinx.html.body
 import kotlinx.html.code
+import kotlinx.html.details
 import kotlinx.html.div
 import kotlinx.html.h1
 import kotlinx.html.head
+import kotlinx.html.li
 import kotlinx.html.meta
+import kotlinx.html.ol
 import kotlinx.html.p
+import kotlinx.html.strong
 import kotlinx.html.style
+import kotlinx.html.summary
 import kotlinx.html.title
+import kotlinx.html.ul
 import kotlinx.html.unsafe
 import org.opengb.AppDeps
 import org.opengb.oauth.ClaimRecord
 import org.opengb.oauth.OAuthException
 import org.opengb.oauth.PendingOAuth
 import org.opengb.proxy.RefreshBlob
+import org.opengb.utility.ScopeSummary
 import org.opengb.utility.UnknownUtilityException
 import org.opengb.utility.UtilityProfile
 
 /**
  * Routes:
+ *  - GET /connect/{utility}/scope[?ha_nonce=...] — the Third Party "Scope Selection Screen": a
+ *    confirmation page listing what data the customer is about to share, with a button that
+ *    continues to `.../start`. This is the URI a Data Custodian (e.g. PG&E) redirects the customer
+ *    to when the flow is *custodian-initiated* (customer picked us from the utility's portal). It's
+ *    also linked from the marketing site's "Connect" buttons so web visitors get the same consent
+ *    step. Registered with custodians as `thirdPartyScopeSelectionScreenURI`.
  *  - GET /connect/{utility}/start[?ha_nonce=...] — generates CSRF state, 302s the user to the
- *    utility's authorize URL.
+ *    utility's authorize URL. Reachable directly (Home-Assistant-initiated flow) or via the scope
+ *    screen above.
  *  - GET /connect/{utility}/callback?code=...&state=... — exchanges code for tokens, encrypts the
  *    refresh blob, stashes it behind a one-time claim code, and renders an HTML page showing the
  *    code to the user.
  */
 fun Application.installConnect(deps: AppDeps) {
   routing {
+    get("/connect/{utility}/scope") { handleScopeScreen(deps) }
     get("/connect/{utility}/start") { handleStart(deps) }
     get("/connect/{utility}/callback") { handleCallback(deps) }
+  }
+}
+
+private suspend fun io.ktor.server.routing.RoutingContext.handleScopeScreen(deps: AppDeps) {
+  val utility = resolveUtility(deps) ?: return
+  // ha_nonce is present when Home Assistant initiates; absent when a Data Custodian sends the
+  // customer here from their portal. Thread it through to `.../start` so the HA case is preserved.
+  val haNonce = call.request.queryParameters["ha_nonce"]
+  val continueUrl =
+    URLBuilder("${deps.config.server.publicBaseUrl}/connect/${utility.id}/start").apply {
+      if (!haNonce.isNullOrBlank()) parameters.append("ha_nonce", haNonce)
+    }.buildString()
+  call.respondHtml {
+    renderScopeScreen(
+      utility = utility,
+      continueUrl = continueUrl,
+      scopeLines = ScopeSummary.describe(utility.defaultScope),
+      historyText = humanizeWindow(utility.initialHistory),
+    )
   }
 }
 
@@ -103,7 +138,15 @@ private suspend fun io.ktor.server.routing.RoutingContext.handleCallback(deps: A
         scope = refreshBlob.scope,
       ),
     )
-  call.respondHtml { renderClaimPage(utilityDisplayName = utility.displayName, claimCode = claimCode) }
+  call.respondHtml {
+    renderClaimPage(
+      utilityDisplayName = utility.displayName,
+      claimCode = claimCode,
+      // No nonce ⇒ the flow was custodian-initiated (customer came from the utility's portal, not
+      // from a waiting Home Assistant), so spell out the HA steps rather than assuming HA is open.
+      haInitiated = pending.haNonce != null,
+    )
+  }
 }
 
 /** 404s on unknown utility and returns null so the caller can `return`. */
@@ -169,9 +212,53 @@ private suspend fun ApplicationCall.respondCallbackError(message: String) {
   }
 }
 
+/**
+ * The Third Party Scope Selection Screen. Lists — in plain English — the data the customer is about
+ * to authorize, shows the exact ESPI scope string for transparency, and continues to `.../start`.
+ */
+private fun HTML.renderScopeScreen(
+  utility: UtilityProfile,
+  continueUrl: String,
+  scopeLines: List<String>,
+  historyText: String,
+) {
+  head {
+    title { +"Share your ${utility.displayName} data" }
+    meta(charset = "utf-8")
+    meta(name = "viewport", content = "width=device-width,initial-scale=1")
+    style { unsafe { raw(CSS) } }
+  }
+  body {
+    h1 { +"Share your ${utility.displayName} data" }
+    p {
+      +"You're about to let "
+      strong { +"Open Green Button" }
+      +" access the following data from ${utility.displayName} on your behalf, so it can appear "
+      +"in your Home Assistant Energy dashboard:"
+    }
+    ul("scope-list") {
+      scopeLines.forEach { li { +it } }
+      li { +"Up to $historyText of history on the first sync" }
+    }
+    p("muted") {
+      +"You'll sign in at ${utility.displayName} and confirm on their page — we never see your "
+      +"utility password. Your readings and the access token are stored only in your Home "
+      +"Assistant, never on our server."
+    }
+    a(href = continueUrl, classes = "btn") { +"Continue to ${utility.displayName}" }
+    details {
+      summary { +"Show the exact data-sharing scope" }
+      div("code-box code-box--left") {
+        code { +utility.defaultScope }
+      }
+    }
+  }
+}
+
 private fun HTML.renderClaimPage(
   utilityDisplayName: String,
   claimCode: String,
+  haInitiated: Boolean,
 ) {
   head {
     title { +"Connected — paste your claim code" }
@@ -181,7 +268,22 @@ private fun HTML.renderClaimPage(
   }
   body {
     h1 { +"Connected to $utilityDisplayName" }
-    p { +"Paste this code into Home Assistant within 10 minutes:" }
+    if (haInitiated) {
+      p { +"Paste this code into Home Assistant within 10 minutes:" }
+    } else {
+      // Custodian-initiated: the customer has no Home Assistant window waiting, so guide them there.
+      p { +"Almost done — finish in Home Assistant within 10 minutes:" }
+      ol("steps-list") {
+        li {
+          +"In Home Assistant, go to "
+          strong { +"Settings → Devices & Services → Add Integration" }
+          +" and pick "
+          strong { +"Open Green Button" }
+          +" (install it via HACS first if you haven't)."
+        }
+        li { +"Choose $utilityDisplayName, then paste this code:" }
+      }
+    }
     div("code-box") {
       code { +claimCode }
     }
@@ -191,10 +293,38 @@ private fun HTML.renderClaimPage(
   }
 }
 
+/**
+ * Render a compact history window spec (`2y`, `6m`, `90d`) as a human phrase for the scope screen.
+ * Falls back to the raw spec for anything unexpected — this is display copy, not a parser.
+ */
+private fun humanizeWindow(spec: String): String {
+  val amount = spec.dropLast(1)
+  val unit =
+    when (spec.lastOrNull()) {
+      'y' -> "year"
+      'm' -> "month"
+      'w' -> "week"
+      'd' -> "day"
+      else -> return spec
+    }
+  val plural = if (amount == "1") unit else "${unit}s"
+  return "$amount $plural"
+}
+
 private const val CSS = """
 body { font-family: system-ui, sans-serif; max-width: 560px; margin: 4rem auto; padding: 0 1.5rem; color: #1a1a1a; line-height: 1.55; }
 h1 { font-size: 1.6rem; margin-bottom: 0.5rem; }
 .muted { color: #666; font-size: 0.92em; }
 .code-box { background: #f4f7f4; border: 1px solid #d5e2d5; padding: 1rem 1.25rem; border-radius: 6px; margin: 1.5rem 0; text-align: center; }
 .code-box code { font-size: 1.4rem; letter-spacing: 0.03em; color: #2d662d; word-break: break-all; user-select: all; }
+.code-box--left { text-align: left; }
+.code-box--left code { font-size: 0.95rem; }
+.scope-list { padding-left: 1.25rem; }
+.scope-list li { margin-bottom: 0.4rem; }
+.steps-list { padding-left: 1.25rem; }
+.steps-list li { margin-bottom: 0.5rem; }
+.btn { display: inline-block; background: #2d662d; color: #fff; padding: 0.7rem 1.4rem; border-radius: 8px; font-weight: 600; text-decoration: none; margin: 0.5rem 0 1rem; }
+.btn:hover { filter: brightness(1.08); }
+details { margin: 1rem 0; }
+summary { cursor: pointer; color: #666; font-size: 0.92em; }
 """

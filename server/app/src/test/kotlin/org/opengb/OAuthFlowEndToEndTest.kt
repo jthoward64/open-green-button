@@ -189,6 +189,67 @@ val OAuthFlowEndToEndTest by testSuite {
       }
     }
   }
+
+  // The Third Party Scope Selection Screen: what a Data Custodian (e.g. PG&E) redirects the
+  // customer to. Renders a plain-English summary + the exact scope, and continues to .../start.
+  test("scope screen renders a summary and continues to start") {
+    runE2E { client, ctx ->
+      val resp = client.get("/connect/mock/scope")
+      assert(resp.status == HttpStatusCode.OK)
+      val html = resp.bodyAsText()
+      // Plain-English summary for FB=1 (present in the mock defaultScope).
+      assert(html.contains("meters and service points", ignoreCase = true)) { html }
+      // The exact scope string is shown verbatim for transparency.
+      assert(html.contains(ctx.utility.defaultScope)) { html }
+      // And the button continues to the OAuth start route for this utility.
+      assert(html.contains("/connect/mock/start")) { html }
+    }
+  }
+
+  test("scope screen threads ha_nonce through to the continue link") {
+    runE2E { client, _ ->
+      val html = client.get("/connect/mock/scope") { parameter("ha_nonce", "nonce123") }.bodyAsText()
+      assert(html.contains("ha_nonce=nonce123")) { html }
+    }
+  }
+
+  test("scope screen for an unknown utility is 404") {
+    runE2E { client, _ ->
+      val resp = client.get("/connect/no_such_utility/scope")
+      assert(resp.status == HttpStatusCode.NotFound)
+    }
+  }
+
+  // Custodian-initiated flow (no ha_nonce): the claim page must guide the customer into Home
+  // Assistant rather than assuming an HA window is already waiting for the code.
+  test("callback without ha_nonce shows Home Assistant setup steps") {
+    runE2E { client, _ ->
+      val location = client.get("/connect/mock/start").headers[HttpHeaders.Location]!!
+      val state = parseQueryString(location.substringAfter('?', ""))["state"]!!
+      val html =
+        client.get("/connect/mock/callback") {
+          parameter("code", "auth_code_xyz")
+          parameter("state", state)
+        }.bodyAsText()
+      assert(html.contains("Almost done", ignoreCase = true)) { html }
+      assert(html.contains("Add Integration", ignoreCase = true)) { html }
+    }
+  }
+
+  test("callback with ha_nonce shows the paste-into-HA copy") {
+    runE2E { client, _ ->
+      val location =
+        client.get("/connect/mock/start") { parameter("ha_nonce", "abc") }
+          .headers[HttpHeaders.Location]!!
+      val state = parseQueryString(location.substringAfter('?', ""))["state"]!!
+      val html =
+        client.get("/connect/mock/callback") {
+          parameter("code", "auth_code_xyz")
+          parameter("state", state)
+        }.bodyAsText()
+      assert(html.contains("Paste this code", ignoreCase = true)) { html }
+    }
+  }
 }
 
 private data class TestCtx(

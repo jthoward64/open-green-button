@@ -228,7 +228,7 @@ private fun BODY.supportedUtilities(config: AppConfig) {
           div("utility-card") {
             div("utility-name") { +utility.displayName }
             a(
-              href = "${config.server.publicBaseUrl}/connect/${utility.id}/start",
+              href = "${config.server.publicBaseUrl}/connect/${utility.id}/scope",
               classes = "btn btn-primary btn-small",
             ) { +"Connect" }
           }
