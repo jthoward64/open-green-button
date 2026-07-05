@@ -1,6 +1,5 @@
 package org.opengb.oauth
 
-import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.headers
 import io.ktor.client.statement.HttpResponse
@@ -14,6 +13,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import org.opengb.http.UtilityHttpClients
 import org.opengb.utility.TokenAuthStyle
 import org.opengb.utility.UtilityProfile
 import java.util.Base64
@@ -34,7 +34,7 @@ data class TokenResponse(
   @SerialName("authorizationURI") val authorizationUri: String? = null,
 )
 
-class OAuthClient(private val http: HttpClient, private val json: Json = DEFAULT_JSON) {
+class OAuthClient(private val clients: UtilityHttpClients, private val json: Json = DEFAULT_JSON) {
   /**
    * Exchanges an OAuth authorization code for tokens at the utility's token endpoint.
    *
@@ -66,7 +66,7 @@ class OAuthClient(private val http: HttpClient, private val json: Json = DEFAULT
   ): TokenResponse {
     val (formParams, basic) = buildAuth(utility, addParams)
     val response: HttpResponse =
-      http.submitForm(
+      clients.forUtility(utility).submitForm(
         url = utility.tokenUrl,
         formParameters = formParams,
       ) {

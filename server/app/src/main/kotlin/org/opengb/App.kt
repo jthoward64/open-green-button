@@ -4,7 +4,6 @@ import com.github.rocketraman.bootable.boot.bindAppService
 import com.github.rocketraman.bootable.boot.boot
 import com.github.rocketraman.bootable.logging.log4j2.LoggingType
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -20,6 +19,7 @@ import org.kodein.di.singleton
 import org.opengb.bootable.CioKtorService
 import org.opengb.config.AppConfig
 import org.opengb.config.loadConfig
+import org.opengb.http.UtilityHttpClients
 import org.opengb.oauth.ClaimStore
 import org.opengb.oauth.OAuthClient
 import org.opengb.oauth.StateStore
@@ -49,6 +49,7 @@ data class AppDeps(
   val registry: UtilityRegistry,
   val stateStore: StateStore,
   val claimStore: ClaimStore,
+  val httpClients: UtilityHttpClients,
   val oauth: OAuthClient,
   val usageClient: UsageClient,
 )
@@ -61,10 +62,13 @@ fun buildAppDeps(
   val registry = UtilityRegistry(config.utilities)
   val stateStore = StateStore(ttl = Duration.ofSeconds(config.state.oauthStateTtlSeconds))
   val claimStore = ClaimStore(ttl = Duration.ofSeconds(config.state.claimCodeTtlSeconds))
-  val httpClient = http ?: HttpClient(CIO)
-  val oauth = OAuthClient(httpClient)
-  val usageClient = UsageClient(httpClient)
-  return AppDeps(config, crypto, registry, stateStore, claimStore, oauth, usageClient)
+  // Tests inject a single (mock) client for every utility; production derives per-utility mTLS
+  // clients (default self-signed + any per-utility overrides) from config.
+  val httpClients =
+    if (http != null) UtilityHttpClients.singleClient(http) else UtilityHttpClients.from(config)
+  val oauth = OAuthClient(httpClients)
+  val usageClient = UsageClient(httpClients)
+  return AppDeps(config, crypto, registry, stateStore, claimStore, httpClients, oauth, usageClient)
 }
 
 /**
@@ -87,7 +91,7 @@ class OpenGbServer(
 val opengbModule =
   DI.Module("opengb") {
     bind<AppConfig> { singleton { loadConfig() } }
-    bind<HttpClient> { singleton { HttpClient(CIO) } }
+    bind<UtilityHttpClients> { singleton { UtilityHttpClients.from(instance<AppConfig>()) } }
     bind<TokenCrypto> { singleton { TokenCrypto(instance<AppConfig>().crypto) } }
     bind<UtilityRegistry> { singleton { UtilityRegistry(instance<AppConfig>().utilities) } }
     bind<StateStore> {
@@ -110,6 +114,7 @@ val opengbModule =
           registry = instance(),
           stateStore = instance(),
           claimStore = instance(),
+          httpClients = instance(),
           oauth = instance(),
           usageClient = instance(),
         )

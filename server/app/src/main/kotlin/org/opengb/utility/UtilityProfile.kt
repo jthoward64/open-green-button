@@ -1,6 +1,7 @@
 package org.opengb.utility
 
 import com.sksamuel.hoplite.Masked
+import org.opengb.config.ClientAuthConfig
 
 /**
  * Static, per-utility configuration. One profile per data custodian we integrate with.
@@ -33,6 +34,13 @@ data class UtilityProfile(
   /** Where the utility POSTs notifications. The proxy registers this URL at app submission time. */
   val notificationPath: String = "/notify/$id",
   val tokenAuthStyle: TokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
+  /**
+   * Per-utility TLS client-authentication (mTLS) override. Present ⇒ connections to this utility
+   * present *this* keystore instead of the default [org.opengb.config.AppConfig.clientAuth]. Use it
+   * for custodians whose cert requirements differ (e.g. a cert they issue rather than our
+   * self-signed default). Absent / no keystore ⇒ fall back to the default block.
+   */
+  val clientAuth: ClientAuthConfig? = null,
   val quirks: UtilityQuirks = UtilityQuirks(),
 ) {
   /** [initialHistory] parsed to seconds. Throws if the configured spec is malformed. */

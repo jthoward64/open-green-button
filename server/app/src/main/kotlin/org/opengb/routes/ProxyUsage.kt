@@ -100,6 +100,7 @@ private suspend fun RoutingContext.handleProxyUsage(
 
   call.streamUsage(
     usageClient,
+    utility,
     subscriptionUri,
     refreshed.accessToken,
     request,
@@ -185,8 +186,10 @@ private fun rotatedCredentials(
   )
 }
 
+@Suppress("LongParameterList")
 private suspend fun ApplicationCall.streamUsage(
   client: UsageClient,
+  utility: UtilityProfile,
   subscriptionUri: String,
   accessToken: String,
   request: ProxyUsageRequest,
@@ -202,6 +205,7 @@ private suspend fun ApplicationCall.streamUsage(
   val upstream: HttpResponse =
     client
       .fetch(
+        utility = utility,
         subscriptionUri = subscriptionUri,
         accessToken = accessToken,
         publishedMin = request.publishedMin,

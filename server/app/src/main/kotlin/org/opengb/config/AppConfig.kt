@@ -11,6 +11,12 @@ data class AppConfig(
   val crypto: CryptoConfig,
   val state: StateConfig,
   val landing: LandingConfig,
+  /**
+   * Default TLS client-authentication (mTLS) material — not tied to any utility. Applied to every
+   * utility that doesn't declare its own [UtilityProfile.clientAuth]. Null / no keystore ⇒ mTLS
+   * off by default. See [ClientAuthConfig].
+   */
+  val clientAuth: ClientAuthConfig? = null,
   val utilities: List<UtilityProfile> = emptyList(),
 )
 

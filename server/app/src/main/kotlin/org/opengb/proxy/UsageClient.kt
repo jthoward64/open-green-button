@@ -1,11 +1,12 @@
 package org.opengb.proxy
 
-import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.HttpStatement
 import io.ktor.http.HttpHeaders
 import io.ktor.http.URLBuilder
+import org.opengb.http.UtilityHttpClients
+import org.opengb.utility.UtilityProfile
 import kotlin.time.Instant
 
 /**
@@ -18,8 +19,9 @@ import kotlin.time.Instant
  * outbound proxy response without materializing it in memory. This is what lets the proxy
  * stay tiny even when a utility returns multi-MB Atom feeds.
  */
-class UsageClient(private val http: HttpClient) {
+class UsageClient(private val clients: UtilityHttpClients) {
   suspend fun fetch(
+    utility: UtilityProfile,
     subscriptionUri: String,
     accessToken: String,
     publishedMin: Instant? = null,
@@ -32,7 +34,7 @@ class UsageClient(private val http: HttpClient) {
           publishedMax?.let { parameters.append("published-max", it.toString()) }
         }.buildString()
 
-    return http.prepareGet(url) {
+    return clients.forUtility(utility).prepareGet(url) {
       headers {
         append(HttpHeaders.Authorization, "Bearer $accessToken")
         append(HttpHeaders.Accept, "application/atom+xml, application/xml")
