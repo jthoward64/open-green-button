@@ -7,6 +7,9 @@ The hosted server is a **stateless OAuth proxy**: utilities require a stable pub
 ## Status
 
 🚧 **Live!** Burlington Hydro (Ontario, Canada).
+🚧 **Registration in progress** London Hydro (Ontario, Canada).
+🚧 **Registration in progress** Niagara Peninsula Energy (Ontario, Canada).
+🚧 **Registration in progress** Pacific Gas & Electric (California).
 
 ### New Utility Support
 
@@ -22,9 +25,9 @@ London Hydro also runs Green Button support for the following utilities, so appr
 * ELK Energy
 * Enwin Utilities
 * Festival Hydro
-* London Hydro
+* London Hydro (registration in progress)
 * Newmarket Tay
-* Niagara Peninsula Energy
+* Niagara Peninsula Energy (registration in progress)
 * Oakville Hydro
 * Oshawa Power
 
