@@ -17,9 +17,9 @@
 #                 what fixes the `NoSuchFieldException: readHandlerReference`, `No factory method
 #                 ... AppenderRef`, and `Only instances of KClass are supported` failures.
 #
-# Requirements: a GraalVM for JDK 21 (so `native-image-agent` is present). mise provides it via
+# Requirements: a GraalVM for JDK 24 (so `native-image-agent` is present). mise provides it via
 # GRAALVM_HOME (see mise.toml) — so inside this repo, with mise active, just run the script. To
-# override, point GRAALVM_HOME or JAVA_HOME at a GraalVM 21 install yourself.
+# override, point GRAALVM_HOME or JAVA_HOME at a GraalVM 24 install yourself.
 #
 # Commit the regenerated META-INF/native-image files afterwards.
 set -euo pipefail
@@ -29,11 +29,11 @@ cd "$(dirname "$0")/../server"
 GVM="${GRAALVM_HOME:-${JAVA_HOME:-}}"
 if [[ -z "$GVM" || ! -x "$GVM/bin/java" ]]; then
   echo "ERROR: no GraalVM found. GRAALVM_HOME should be set by mise (run from the repo with mise" >&2
-  echo "  active, after 'mise install'), or point GRAALVM_HOME/JAVA_HOME at a GraalVM for JDK 21." >&2
+  echo "  active, after 'mise install'), or point GRAALVM_HOME/JAVA_HOME at a GraalVM for JDK 24." >&2
   exit 1
 fi
 if [[ ! -f "$GVM/lib/libnative-image-agent.so" ]]; then
-  echo "ERROR: $GVM is not a GraalVM (no native-image-agent). Use a GraalVM for JDK 21." >&2
+  echo "ERROR: $GVM is not a GraalVM (no native-image-agent). Use a GraalVM for JDK 24." >&2
   exit 1
 fi
 
@@ -57,6 +57,11 @@ run_clean() {
 echo "==> [1/3] Tracing the test suite under the native-image agent"
 run_clean ./gradlew --no-daemon -Pagent --rerun-tasks :app:test
 run_clean ./gradlew --no-daemon :app:metadataCopy
+# GraalVM 23+ emits the unified reachability-metadata.json, but metadataCopy leaves any pre-existing
+# legacy split *-config.json (+ agent-extracted-predefined-classes/) in place. Prune them so
+# from-tests stays a clean single-format snapshot and doesn't perpetually trip the CI drift guard.
+find "$META_ROOT/from-tests" -maxdepth 1 -name '*-config.json' -delete
+rm -rf "$META_ROOT/from-tests/agent-extracted-predefined-classes"
 
 echo "==> [2/3] Building the install distribution (runtime classpath)"
 run_clean ./gradlew --no-daemon :app:installDist
@@ -78,9 +83,24 @@ if curl -fsS -o /dev/null -m1 "http://127.0.0.1:$PORT/health" 2>/dev/null; then
   echo "ERROR: port $PORT is already in use — free it (or set OPENGB_METADATA_PORT) and retry." >&2
   exit 1
 fi
+# The default clean-env boot builds a plain HTTP client and never loads a keystore, so the mTLS
+# client-auth path (KeyStore.getInstance("PKCS12").load + Ktor's addKeyStore reflecting into the
+# PKCS12 keystore SPI) would go untraced and then fail at *runtime* on the Fly machine once the
+# real OPENGB_CLIENTAUTH_KEYSTOREBASE64 secret is set. Boot WITH a throwaway keystore so that path
+# is exercised and captured. The cert contents are irrelevant to reachability — only that the
+# PKCS12 keystore is instantiated and read. See config/ClientAuthConfig.kt + http/UtilityHttpClients.kt.
+KS_DIR="$(mktemp -d)"
+KS_PW="metadata"
+openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+  -keyout "$KS_DIR/k.key" -out "$KS_DIR/k.crt" -subj "/CN=metadata" \
+  -addext "extendedKeyUsage=clientAuth" >/dev/null 2>&1
+openssl pkcs12 -export -inkey "$KS_DIR/k.key" -in "$KS_DIR/k.crt" \
+  -out "$KS_DIR/k.p12" -passout pass:"$KS_PW" >/dev/null 2>&1
+KS_B64="$(base64 -w0 "$KS_DIR/k.p12")"
 env -i HOME="$HOME" LANG="${LANG:-C.UTF-8}" \
   JAVA_HOME="$GVM" GRAALVM_HOME="$GVM" PATH="$GVM/bin:/usr/bin:/bin" \
   OPENGB_HOST_PORT="127.0.0.1:$PORT" OPENGB_PUBLIC_BASE_URL="http://127.0.0.1:$PORT" \
+  OPENGB_CLIENTAUTH_KEYSTOREBASE64="$KS_B64" OPENGB_CLIENTAUTH_KEYSTOREPASSWORD="$KS_PW" \
   "$GVM/bin/java" "-agentlib:native-image-agent=config-output-dir=$META_APP" \
   -cp "$LIBDIR/*" org.opengb.AppKt >/tmp/opengb-metadata-run.log 2>&1 &
 APP_PID=$!
@@ -100,7 +120,8 @@ kill -TERM "$APP_PID" 2>/dev/null || true
 for _ in $(seq 1 150); do kill -0 "$APP_PID" 2>/dev/null || break; sleep 0.1; done
 # Backstop: never leave a process holding the port for the next run.
 kill -9 "$APP_PID" 2>/dev/null || true
-if [[ ! -s "$META_APP/reflect-config.json" ]] || ! grep -q '"name"' "$META_APP/reflect-config.json"; then
+rm -rf "$KS_DIR"
+if [[ ! -s "$META_APP/reachability-metadata.json" ]] || ! grep -q '"type"' "$META_APP/reachability-metadata.json"; then
   echo "ERROR: agent produced no metadata in $META_APP — did the app boot? See /tmp/opengb-metadata-run.log" >&2
   exit 1
 fi

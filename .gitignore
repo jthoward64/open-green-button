@@ -52,3 +52,16 @@ mise.local.toml
 
 # Claude
 .claude/worktrees/
+
+# TLS client-auth material — private keys / keystores / CSRs must NEVER be committed.
+# The keystore is delivered to prod as a base64 Fly secret (OPENGB_CLIENTAUTH_KEYSTOREBASE64),
+# not a repo file. The Root CA key (ogb-ca.key) is the trust anchor — keep it offline.
+*.key
+*.p12
+*.pfx
+*.jks
+*.csr
+*.srl
+ogb-ca.crt
+ogb-client.crt
+ogb-client.ext
