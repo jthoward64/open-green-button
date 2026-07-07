@@ -67,8 +67,15 @@ class UtilityHttpClients private constructor(
       return UtilityHttpClients(default, perUtility, owned = listOf(default) + perUtility.values)
     }
 
+    // ESPI Data Custodians assemble a subscription batch on demand and can take tens of seconds
+    // before the first byte — especially on a first, full-history pull. CIO's default 15s request
+    // timeout cuts that off (observed against savagedata), so give utility calls a generous cap.
+    private const val UTILITY_REQUEST_TIMEOUT_MS = 300_000L
+
     private fun buildClient(auth: ClientAuthConfig?): HttpClient {
-      if (auth == null || !auth.hasMaterial()) return HttpClient(CIO)
+      if (auth == null || !auth.hasMaterial()) {
+        return HttpClient(CIO) { engine { requestTimeout = UTILITY_REQUEST_TIMEOUT_MS } }
+      }
       val storePassword =
         requireNotNull(auth.keystorePassword?.value) {
           "clientAuth.keystorePassword is required when a keystore is configured"
@@ -79,6 +86,7 @@ class UtilityHttpClients private constructor(
       val keyPassword = auth.keyPassword?.value?.toCharArray() ?: storePassword
       return HttpClient(CIO) {
         engine {
+          requestTimeout = UTILITY_REQUEST_TIMEOUT_MS
           https {
             // Presents the private key + cert chain from the keystore as our client certificate
             // during the TLS handshake. `keyAlias == null` selects the sole key entry.

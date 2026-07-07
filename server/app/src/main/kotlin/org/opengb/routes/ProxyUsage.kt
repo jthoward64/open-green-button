@@ -19,6 +19,7 @@ import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.copyTo
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import org.opengb.AppDeps
 import org.opengb.oauth.OAuthException
@@ -94,18 +95,19 @@ private suspend fun RoutingContext.handleProxyUsage(
 
   val refreshed = call.refreshAccessToken(deps, utility, blob.refreshToken) ?: return
 
-  // Compute the rotated credentials BEFORE we start streaming. Once we begin writing the
-  // response body, headers are committed and we can no longer add OpenGB-New-* headers.
+  // The refresh above may have redeemed a ONE-TIME refresh token (e.g. OpenIddict, which savagedata
+  // runs), invalidating the blob the client still holds. Emit the rotated credentials NOW — before
+  // the resource fetch — so they reach the client on *every* outcome, including a fetch timeout or
+  // upstream error, not just the success path. Otherwise a post-refresh failure strands the client
+  // with a dead refresh token and forces a full re-authorization. (Headers set here are committed
+  // with whatever response we ultimately send, error or stream.)
   val newCredentials = rotatedCredentials(deps.crypto, blob, refreshed.refreshToken)
+  newCredentials?.let {
+    call.response.header(HEADER_NEW_ENCRYPTED_REFRESH_BLOB, it.encryptedRefreshBlob)
+    call.response.header(HEADER_NEW_PROXY_TOKEN, it.proxyToken)
+  }
 
-  call.streamUsage(
-    usageClient,
-    utility,
-    subscriptionUri,
-    refreshed.accessToken,
-    request,
-    newCredentials,
-  )
+  call.streamUsage(usageClient, utility, subscriptionUri, refreshed.accessToken, request)
 }
 
 private fun ApplicationCall.bearerToken(): String? {
@@ -186,14 +188,13 @@ private fun rotatedCredentials(
   )
 }
 
-@Suppress("LongParameterList")
+@Suppress("TooGenericExceptionCaught")
 private suspend fun ApplicationCall.streamUsage(
   client: UsageClient,
   utility: UtilityProfile,
   subscriptionUri: String,
   accessToken: String,
   request: ProxyUsageRequest,
-  newCredentials: NewCredentials?,
 ) {
   // `execute()` (no block variant) returns an HttpResponse we own — its body channel stays
   // open until *we* cancel it, not when an enclosing block returns. That's the lifecycle
@@ -203,14 +204,29 @@ private suspend fun ApplicationCall.streamUsage(
   // form, the block returns before body writing finishes and upstream gets torn down mid-
   // copy → ClosedByteChannelException.
   val upstream: HttpResponse =
-    client
-      .fetch(
-        utility = utility,
-        subscriptionUri = subscriptionUri,
-        accessToken = accessToken,
-        publishedMin = request.publishedMin,
-        publishedMax = request.publishedMax,
-      ).execute()
+    try {
+      client
+        .fetch(
+          utility = utility,
+          subscriptionUri = subscriptionUri,
+          accessToken = accessToken,
+          publishedMin = request.publishedMin,
+          publishedMax = request.publishedMax,
+        ).execute()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Timeout / connection reset / TLS error reaching the resource server, before we have any
+      // response. Report a retryable upstream error — crucially, the rotated-credentials headers
+      // set by the caller are already on this response, so the client keeps its refreshed token
+      // and can retry rather than being forced to re-authorize.
+      respondError(
+        HttpStatusCode.BadGateway,
+        "utility_upstream_error",
+        "Resource fetch failed for $subscriptionUri: ${e.message}",
+      )
+      return
+    }
   try {
     if (upstream.status == HttpStatusCode.Accepted) {
       handleUpstreamAccepted(upstream)
@@ -219,10 +235,6 @@ private suspend fun ApplicationCall.streamUsage(
     if (upstream.status != HttpStatusCode.OK) {
       handleUpstreamFailure(upstream)
       return
-    }
-    newCredentials?.let {
-      response.header(HEADER_NEW_ENCRYPTED_REFRESH_BLOB, it.encryptedRefreshBlob)
-      response.header(HEADER_NEW_PROXY_TOKEN, it.proxyToken)
     }
     val upstreamContentType =
       upstream.headers[HttpHeaders.ContentType]?.let { ContentType.parse(it) }

@@ -88,6 +88,26 @@ val ProxyUsageTest by testSuite {
     }
   }
 
+  test("preserves rotated credentials on an upstream failure (post-refresh error must not strand client)") {
+    // Refresh rotates the (one-time) refresh token, then the resource server 500s. The rotated
+    // blob MUST still come back so the client keeps its refreshed token and can retry instead of
+    // being forced to re-authorize.
+    runProxyUsage(
+      resourceStatus = HttpStatusCode.InternalServerError,
+      refreshTokenInResponse = "rt_rotated_value",
+    ) { client, ctx ->
+      val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
+      assert(resp.status == HttpStatusCode.BadGateway) { resp.bodyAsText() }
+      assert(resp.bodyAsText().contains("utility_upstream_error")) { resp.bodyAsText() }
+      val rotatedBlob =
+        resp.headers[HEADER_NEW_ENCRYPTED_REFRESH_BLOB]
+          ?: error("rotated blob header missing on upstream failure — client would be stranded")
+      val crypto = TokenCrypto(ctx.config.crypto)
+      assert(crypto.decrypt(rotatedBlob).refreshToken == "rt_rotated_value")
+      assert(resp.headers[HEADER_NEW_PROXY_TOKEN] != null)
+    }
+  }
+
   test("401 invalid_credentials when the proxy token doesn't match the blob") {
     runProxyUsage { client, ctx ->
       val resp =
