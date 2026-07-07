@@ -33,6 +33,7 @@ import org.opengb.proxy.RefreshBlob
 import org.opengb.proxy.TokenCrypto
 import org.opengb.utility.TokenAuthStyle
 import org.opengb.utility.UtilityProfile
+import org.opengb.utility.UtilityQuirks
 import java.util.Base64
 import kotlin.time.Instant
 
@@ -158,9 +159,35 @@ val ProxyUsageTest by testSuite {
     }
   }
 
-  test("forwards published-min/max to the resource server as ISO 8601 with Z suffix") {
+  test("forwards published-min/max to the resource server as epoch seconds by default (NAESB standard)") {
     var capturedUrl: io.ktor.http.Url? = null
     runProxyUsage(captureResourceRequest = { capturedUrl = it.url }) { client, ctx ->
+      val resp =
+        client.postProxyUsage(
+          ctx.proxyToken,
+          ctx.encryptedBlob,
+          publishedMin = Instant.parse("2024-02-23T05:00:00Z"),
+          publishedMax = Instant.parse("2026-02-24T05:00:00Z"),
+        )
+      assert(resp.status == HttpStatusCode.OK)
+    }
+    val parsed = capturedUrl ?: error("resource server was not called")
+    assert(parsed.parameters["published-min"] == Instant.parse("2024-02-23T05:00:00Z").epochSeconds.toString()) {
+      parsed.toString()
+    }
+    assert(parsed.parameters["published-max"] == Instant.parse("2026-02-24T05:00:00Z").epochSeconds.toString()) {
+      parsed.toString()
+    }
+  }
+
+  test("sends published-min/max as ISO 8601 with Z suffix when the iso8601 quirk is set") {
+    // The Green Button test-lab platform (Burlington) is non-standard: it wants ISO 8601 rather
+    // than the default epoch seconds. The iso8601PublishedParams quirk switches the wire format.
+    var capturedUrl: io.ktor.http.Url? = null
+    runProxyUsage(
+      quirks = UtilityQuirks(iso8601PublishedParams = true),
+      captureResourceRequest = { capturedUrl = it.url },
+    ) { client, ctx ->
       val resp =
         client.postProxyUsage(
           ctx.proxyToken,
@@ -213,6 +240,7 @@ private fun runProxyUsage(
   resourceStatus: HttpStatusCode = HttpStatusCode.OK,
   // Default matches the blob's refresh token, so happy-path tests see no rotation.
   refreshTokenInResponse: String = "rt_mock_value",
+  quirks: UtilityQuirks = UtilityQuirks(),
   captureResourceRequest: ((HttpRequestData) -> Unit)? = null,
   block: suspend (io.ktor.client.HttpClient, ProxyUsageCtx) -> Unit,
 ) {
@@ -227,6 +255,7 @@ private fun runProxyUsage(
       clientSecret = Masked("client_secret_xyz"),
       defaultScope = "FB=1;IntervalDuration=900",
       tokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
+      quirks = quirks,
     )
 
   val tokenResponseJson =

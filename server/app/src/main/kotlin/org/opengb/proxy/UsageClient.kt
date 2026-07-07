@@ -30,8 +30,8 @@ class UsageClient(private val clients: UtilityHttpClients) {
     val url =
       URLBuilder(subscriptionUri)
         .apply {
-          publishedMin?.let { parameters.append("published-min", it.toString()) }
-          publishedMax?.let { parameters.append("published-max", it.toString()) }
+          publishedMin?.let { parameters.append("published-min", formatPublished(it, utility)) }
+          publishedMax?.let { parameters.append("published-max", formatPublished(it, utility)) }
         }.buildString()
 
     return clients.forUtility(utility).prepareGet(url) {
@@ -41,4 +41,11 @@ class UsageClient(private val clients: UtilityHttpClients) {
       }
     }
   }
+
+  // ESPI published-min/max are Unix epoch seconds per the NAESB standard (our default); the Green
+  // Button test-lab platform (which Burlington runs on) instead requires ISO 8601. Pick per-utility.
+  private fun formatPublished(
+    instant: Instant,
+    utility: UtilityProfile,
+  ): String = if (utility.quirks.iso8601PublishedParams) instant.toString() else instant.epochSeconds.toString()
 }

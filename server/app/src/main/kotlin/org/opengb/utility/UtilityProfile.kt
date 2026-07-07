@@ -63,6 +63,14 @@ enum class TokenAuthStyle {
 data class UtilityQuirks(
   val sendsRefreshTokenOnRefresh: Boolean = true,
   val requiresClientCredentialsForMetadata: Boolean = false,
+  /**
+   * Send the ESPI `published-min`/`published-max` query params as **ISO 8601** instead of Unix
+   * epoch seconds. The default (`false`) is epoch seconds — what the NAESB/OpenESPI standard
+   * specifies and what standards-compliant custodians (e.g. savagedata) require; they reject ISO
+   * 8601 with an empty-body `400`. Set `true` for the Green Button test-lab platform (which
+   * Burlington runs on), whose non-standard resource server instead requires ISO 8601.
+   */
+  val iso8601PublishedParams: Boolean = false,
 )
 
 data class UtilitiesConfig(val utilities: List<UtilityProfile> = emptyList())
