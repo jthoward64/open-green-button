@@ -47,6 +47,14 @@ class UtilityHttpClients private constructor(
       UtilityHttpClients(default = http, perUtility = emptyMap(), owned = emptyList())
 
     /**
+     * Build a single standalone [HttpClient] with the given client-auth material (or plain TLS when
+     * [auth] carries none). Used by the onboarding driver, which talks to a Data Custodian that
+     * isn't a configured utility yet but requires the same mTLS client certificate. Caller owns and
+     * must [HttpClient.close] the returned client.
+     */
+    fun mtlsClient(auth: ClientAuthConfig?): HttpClient = buildClient(auth)
+
+    /**
      * Build the real clients from config: a default client plus one per utility that carries its
      * own client-auth material.
      */

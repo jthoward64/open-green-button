@@ -1,5 +1,6 @@
 package org.opengb.oauth
 
+import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.headers
 import io.ktor.client.statement.HttpResponse
@@ -34,6 +35,19 @@ data class TokenResponse(
   @SerialName("authorizationURI") val authorizationUri: String? = null,
 )
 
+/**
+ * Parameters for an OAuth2 client_credentials grant against a Data Custodian token endpoint (ESPI
+ * onboarding). Bundled so the credentials + endpoint travel together rather than as a long argument
+ * list.
+ */
+data class ClientCredentialsRequest(
+  val tokenUrl: String,
+  val clientId: String,
+  val clientSecret: String,
+  val scope: String? = null,
+  val authStyle: TokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
+)
+
 class OAuthClient(private val clients: UtilityHttpClients, private val json: Json = DEFAULT_JSON) {
   /**
    * Exchanges an OAuth authorization code for tokens at the utility's token endpoint.
@@ -60,33 +74,87 @@ class OAuthClient(private val clients: UtilityHttpClients, private val json: Jso
       append("refresh_token", refreshToken)
     }
 
+  /**
+   * OAuth2 **client_credentials** grant (RFC 6749 §4.4). Used during ESPI 3.3 onboarding to obtain
+   * a `registration_access_token` from a Data Custodian's token endpoint — the token we then present
+   * to GET the ApplicationInformation resource.
+   *
+   * Unlike [exchangeCode]/[refresh] this is **not** utility-scoped: at onboarding time the utility
+   * isn't in `utilities.conf` yet (its real credentials live in the ApplicationInformation we're
+   * about to fetch). The caller therefore supplies the DC token URL, the *initial registration*
+   * client credentials, and the [httpClient] to make the call over — which for savagedata must be
+   * an mTLS client presenting our (non-self-signed) client certificate.
+   */
+  suspend fun clientCredentials(
+    httpClient: HttpClient,
+    request: ClientCredentialsRequest,
+  ): TokenResponse =
+    postForm(
+      TokenEndpointCall(
+        httpClient = httpClient,
+        tokenUrl = request.tokenUrl,
+        clientId = request.clientId,
+        clientSecret = request.clientSecret,
+        authStyle = request.authStyle,
+        label = "onboarding client_credentials",
+      ),
+    ) {
+      append("grant_type", "client_credentials")
+      if (!request.scope.isNullOrBlank()) append("scope", request.scope)
+    }
+
   private suspend fun post(
     utility: UtilityProfile,
     addParams: ParametersBuilder.() -> Unit,
+  ): TokenResponse =
+    postForm(
+      TokenEndpointCall(
+        httpClient = clients.forUtility(utility),
+        tokenUrl = utility.tokenUrl,
+        clientId = utility.clientId,
+        clientSecret = utility.clientSecret.value,
+        authStyle = utility.tokenAuthStyle,
+        label = "Utility '${utility.id}'",
+      ),
+      addParams,
+    )
+
+  /** The token-endpoint coordinates + client auth for a single grant call. */
+  private data class TokenEndpointCall(
+    val httpClient: HttpClient,
+    val tokenUrl: String,
+    val clientId: String,
+    val clientSecret: String,
+    val authStyle: TokenAuthStyle,
+    val label: String,
+  )
+
+  private suspend fun postForm(
+    call: TokenEndpointCall,
+    addParams: ParametersBuilder.() -> Unit,
   ): TokenResponse {
-    val (formParams, basic) = buildAuth(utility, addParams)
+    val (formParams, basic) = buildAuth(call.clientId, call.clientSecret, call.authStyle, addParams)
     val response: HttpResponse =
-      clients.forUtility(utility).submitForm(
-        url = utility.tokenUrl,
-        formParameters = formParams,
-      ) {
+      call.httpClient.submitForm(url = call.tokenUrl, formParameters = formParams) {
         headers {
           if (basic != null) append(HttpHeaders.Authorization, "Basic $basic")
           append(HttpHeaders.Accept, "application/json")
         }
       }
-    return parse(response, utility)
+    return parse(response, call.label)
   }
 
   private fun buildAuth(
-    utility: UtilityProfile,
+    clientId: String,
+    clientSecret: String,
+    authStyle: TokenAuthStyle,
     addParams: ParametersBuilder.() -> Unit,
   ): Pair<Parameters, String?> {
-    return when (utility.tokenAuthStyle) {
+    return when (authStyle) {
       TokenAuthStyle.HTTP_BASIC -> {
         val basic =
           Base64.getEncoder().encodeToString(
-            "${utility.clientId}:${utility.clientSecret.value}".toByteArray(Charsets.UTF_8),
+            "$clientId:$clientSecret".toByteArray(Charsets.UTF_8),
           )
         parameters { addParams() } to basic
       }
@@ -94,8 +162,8 @@ class OAuthClient(private val clients: UtilityHttpClients, private val json: Jso
         val withCreds =
           parameters {
             addParams()
-            append("client_id", utility.clientId)
-            append("client_secret", utility.clientSecret.value)
+            append("client_id", clientId)
+            append("client_secret", clientSecret)
           }
         withCreds to null
       }
@@ -104,12 +172,12 @@ class OAuthClient(private val clients: UtilityHttpClients, private val json: Jso
 
   private suspend fun parse(
     response: HttpResponse,
-    utility: UtilityProfile,
+    label: String,
   ): TokenResponse {
     val bodyText = response.bodyAsText()
     if (response.status != HttpStatusCode.OK) {
       throw OAuthException(
-        "Utility '${utility.id}' returned ${response.status.value} from token endpoint: $bodyText",
+        "$label returned ${response.status.value} from token endpoint: $bodyText",
         statusCode = response.status.value,
       )
     }
@@ -117,7 +185,7 @@ class OAuthClient(private val clients: UtilityHttpClients, private val json: Jso
       json.decodeFromString(TokenResponse.serializer(), bodyText)
     } catch (e: SerializationException) {
       throw OAuthException(
-        "Utility '${utility.id}' returned a malformed token response: $bodyText",
+        "$label returned a malformed token response: $bodyText",
         cause = e,
       )
     }

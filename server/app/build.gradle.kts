@@ -52,6 +52,21 @@ application {
   mainClass.set("org.opengb.AppKt")
 }
 
+// Operator-only entrypoint for ESPI 3.3 onboarding (dynamic client registration): fetch & dump a
+// utility's ApplicationInformation. A dev tool run on the JVM — not wired into the server and not
+// reachable from the native image (mainClass above stays org.opengb.AppKt). Reads a gitignored
+// .env at the repo root (see ../../.env.template).
+//   ./gradlew :app:onboardFetchAppInfo --args="milton_hydro"
+tasks.register<JavaExec>("onboardFetchAppInfo") {
+  group = "onboarding"
+  description = "Fetch & dump a utility's ESPI ApplicationInformation (arg: <utilityId>)."
+  classpath = sourceSets["main"].runtimeClasspath
+  mainClass.set("org.opengb.onboarding.FetchAppInfoKt")
+  // Run from the git root so the driver's .env search finds open-green-button/.env. (rootProject
+  // is server/, so its parent is the git root.)
+  workingDir = rootProject.projectDir.parentFile
+}
+
 // GraalVM native image — produces a self-contained binary for the scale-to-zero Fly.io
 // deployment (see ../../Dockerfile and docs/deployment.md). CIO is the only Ktor engine that
 // works under native-image; see bootable/CioKtorService.kt for why we committed to it. The
