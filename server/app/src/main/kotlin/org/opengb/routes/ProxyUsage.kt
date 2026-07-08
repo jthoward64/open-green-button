@@ -68,6 +68,13 @@ data class ProxyUsageRequest(
   val publishedMin: Instant? = null,
   /** ESPI `published-max` filter — same wire format. */
   val publishedMax: Instant? = null,
+  /**
+   * DIAGNOSTIC override of the ESPI date-filter query-parameter base name. Default (`null`) sends
+   * `published-min`/`published-max`; set e.g. `"updated"` to send `updated-min`/`updated-max`.
+   * Exists to probe what a non-conforming Data Custodian (savagedata) actually accepts without a
+   * redeploy per experiment. The normal HA client never sends it.
+   */
+  val dateFilterParam: String? = null,
 )
 
 const val HEADER_NEW_ENCRYPTED_REFRESH_BLOB: String = "OpenGB-New-Encrypted-Refresh-Blob"
@@ -212,6 +219,7 @@ private suspend fun ApplicationCall.streamUsage(
           accessToken = accessToken,
           publishedMin = request.publishedMin,
           publishedMax = request.publishedMax,
+          dateFilterParam = request.dateFilterParam,
         ).execute()
     } catch (e: CancellationException) {
       throw e

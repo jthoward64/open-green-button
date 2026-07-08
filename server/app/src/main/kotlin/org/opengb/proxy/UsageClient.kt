@@ -20,18 +20,23 @@ import kotlin.time.Instant
  * stay tiny even when a utility returns multi-MB Atom feeds.
  */
 class UsageClient(private val clients: UtilityHttpClients) {
+  @Suppress("LongParameterList")
   suspend fun fetch(
     utility: UtilityProfile,
     subscriptionUri: String,
     accessToken: String,
     publishedMin: Instant? = null,
     publishedMax: Instant? = null,
+    dateFilterParam: String? = null,
   ): HttpStatement {
+    // Base name of the ESPI date-range query params (`published` → published-min/published-max).
+    // Overridable per request for diagnosing a non-conforming custodian (e.g. `updated`).
+    val base = dateFilterParam?.takeIf { it.isNotBlank() } ?: "published"
     val url =
       URLBuilder(subscriptionUri)
         .apply {
-          publishedMin?.let { parameters.append("published-min", formatPublished(it, utility)) }
-          publishedMax?.let { parameters.append("published-max", formatPublished(it, utility)) }
+          publishedMin?.let { parameters.append("$base-min", formatPublished(it, utility)) }
+          publishedMax?.let { parameters.append("$base-max", formatPublished(it, utility)) }
         }.buildString()
 
     return clients.forUtility(utility).prepareGet(url) {
