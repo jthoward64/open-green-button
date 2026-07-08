@@ -189,8 +189,10 @@ val ProxyUsageTest by testSuite {
       assert(resp.status == HttpStatusCode.OK)
     }
     val parsed = capturedUrl ?: error("resource server was not called")
-    val sentMax = Instant.parse(parsed.parameters["published-max"] ?: error("no published-max sent"))
-    assert(sentMax < farFuture) { "future published-max was not clamped: $sentMax" }
+    val sentMaxText = parsed.parameters["published-max"] ?: error("no published-max sent")
+    assert(Instant.parse(sentMaxText) < farFuture) { "future published-max was not clamped: $sentMaxText" }
+    // Whole-second precision only — Burlington's platform 400s a sub-second published-max.
+    assert(!sentMaxText.contains(".")) { "clamped published-max carried sub-second precision: $sentMaxText" }
     // published-min (in the past) is passed through untouched, as ISO 8601.
     assert(parsed.parameters["published-min"] == "2024-02-23T05:00:00Z") { parsed.toString() }
   }

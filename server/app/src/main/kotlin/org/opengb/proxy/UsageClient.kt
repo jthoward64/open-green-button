@@ -52,5 +52,12 @@ class UsageClient(private val clients: UtilityHttpClients) {
     }
   }
 
-  private fun nowInstant(): Instant = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+  // Whole-second precision, on purpose: Burlington's Green Button platform rejects a published-max
+  // that carries sub-second precision with a bare 400, and the raw millis from currentTimeMillis()
+  // would leak into the ISO string (…:31.383Z) when we clamp a future max down to now.
+  private fun nowInstant(): Instant = Instant.fromEpochSeconds(System.currentTimeMillis() / MILLIS_PER_SECOND)
+
+  private companion object {
+    const val MILLIS_PER_SECOND = 1000L
+  }
 }
