@@ -69,8 +69,10 @@ data class ProxyUsageRequest(
   /**
    * DIAGNOSTIC override of the ESPI date-filter query-parameter base name. Default (`null`) sends
    * `published-min`/`published-max`; set e.g. `"updated"` to send `updated-min`/`updated-max`.
-   * Exists to probe what a non-conforming Data Custodian (savagedata) actually accepts without a
-   * redeploy per experiment. The normal HA client never sends it.
+   * Exists to probe what a non-conforming Data Custodian actually accepts without a redeploy per
+   * experiment. The normal HA client never sends it. A confirmed-correct value for a utility
+   * belongs in [org.opengb.utility.UtilityQuirks.dateFilterParam] instead — that always takes
+   * precedence over this field (see [streamResource]).
    */
   val dateFilterParam: String? = null,
 )
@@ -314,7 +316,10 @@ private suspend fun ApplicationCall.streamResource(
         accessToken = accessToken,
         publishedMin = request.publishedMin,
         publishedMax = request.publishedMax,
-        dateFilterParam = request.dateFilterParam,
+        // A confirmed per-utility quirk always wins over the client's diagnostic-only
+        // override — see [UtilityQuirks.dateFilterParam]. The HA client never sets this, so
+        // in practice this is utility.quirks.dateFilterParam or the spec-default `published`.
+        dateFilterParam = utility.quirks.dateFilterParam ?: request.dateFilterParam,
       ).execute { upstream ->
         when {
           upstream.status == HttpStatusCode.Accepted -> handleUpstreamAccepted(upstream)

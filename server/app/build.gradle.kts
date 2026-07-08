@@ -79,6 +79,17 @@ tasks.register<JavaExec>("onboardFetchUsageDirect") {
   workingDir = rootProject.projectDir.parentFile
 }
 
+// Operator diagnostic: probe Burlington Hydro's resource server directly with published-min vs
+// updated-min, for an EXISTING (already-claimed) subscription. See ProbeDateFilterParam.kt.
+//   ./gradlew :app:onboardProbeDateFilterParam --args="<encryptedRefreshBlob>"
+tasks.register<JavaExec>("onboardProbeDateFilterParam") {
+  group = "onboarding"
+  description = "Probe Burlington's resource server with published-min vs updated-min (args: <encryptedRefreshBlob>)."
+  classpath = sourceSets["main"].runtimeClasspath
+  mainClass.set("org.opengb.onboarding.ProbeDateFilterParamKt")
+  workingDir = rootProject.projectDir.parentFile
+}
+
 // GraalVM native image — produces a self-contained binary for the scale-to-zero Fly.io
 // deployment (see ../../Dockerfile and docs/deployment.md). CIO is the only Ktor engine that
 // works under native-image; see bootable/CioKtorService.kt for why we committed to it. The

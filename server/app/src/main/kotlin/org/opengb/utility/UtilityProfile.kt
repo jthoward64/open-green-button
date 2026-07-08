@@ -63,6 +63,25 @@ enum class TokenAuthStyle {
 data class UtilityQuirks(
   val sendsRefreshTokenOnRefresh: Boolean = true,
   val requiresClientCredentialsForMetadata: Boolean = false,
+  /**
+   * Override the ESPI date-range query-parameter base name this utility's resource server
+   * actually honors for incremental retrieval, e.g. `"updated"` to send `updated-min`/
+   * `updated-max` instead of the spec-default `published-min`/`published-max`.
+   *
+   * Escape hatch for a utility whose interval resources genuinely carry a stale `<published>`
+   * timestamp (e.g. resource-creation time) rather than data-availability time, which would make
+   * `published-min` filter out every interval on an incremental (recent-window) poll. Before
+   * setting this for a utility, confirm with a DIRECT probe (bypassing our own client — an
+   * HA-side cursor bug can produce the same 0-reading symptom) that `updated-min` genuinely
+   * scopes to the requested window and doesn't just return the full history regardless of it —
+   * see the Burlington Hydro investigation (2026-07-08, docs/utilities/burlington-incremental-
+   * issue.md) for a case where it looked like the fix but turned out not to be: a properly
+   * scoped `updated-min` probe returned an IDENTICAL reading count/date-range whether the window
+   * was 4 days or 2 years wide, meaning it wasn't filtering at all — using it for periodic
+   * polling would have pulled the entire history on every poll. Null (default) ⇒ spec-default
+   * `published`.
+   */
+  val dateFilterParam: String? = null,
 )
 
 data class UtilitiesConfig(val utilities: List<UtilityProfile> = emptyList())

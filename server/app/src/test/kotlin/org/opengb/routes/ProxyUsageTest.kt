@@ -33,6 +33,7 @@ import org.opengb.proxy.RefreshBlob
 import org.opengb.proxy.TokenCrypto
 import org.opengb.utility.TokenAuthStyle
 import org.opengb.utility.UtilityProfile
+import org.opengb.utility.UtilityQuirks
 import java.util.Base64
 import kotlin.time.Instant
 
@@ -175,6 +176,57 @@ val ProxyUsageTest by testSuite {
     assert(parsed.parameters["published-max"] == "2026-02-24T05:00:00Z") { parsed.toString() }
   }
 
+  test("a utility quirk sends updated-min/max instead of published-min/max") {
+    // Mechanism test for UtilityQuirks.dateFilterParam — a per-utility, not client-driven,
+    // override of the ESPI date-filter query-parameter base name. Motivated by (but NOT
+    // currently used for) Burlington Hydro: a live probe initially looked like updated-min was
+    // needed there, but a later, more careful probe showed updated-min returns the FULL history
+    // regardless of window — not incremental — so Burlington does not set this quirk. See
+    // UtilityQuirks.dateFilterParam's doc comment and docs/utilities/burlington-incremental-
+    // issue.md for the full story. The mechanism itself is still real and tested here in case a
+    // different utility genuinely needs it.
+    var capturedUrl: io.ktor.http.Url? = null
+    runProxyUsage(
+      captureResourceRequest = { capturedUrl = it.url },
+      quirks = UtilityQuirks(dateFilterParam = "updated"),
+    ) { client, ctx ->
+      val resp =
+        client.postProxyUsage(
+          ctx.proxyToken,
+          ctx.encryptedBlob,
+          publishedMin = Instant.parse("2024-02-23T05:00:00Z"),
+          publishedMax = Instant.parse("2026-02-24T05:00:00Z"),
+        )
+      assert(resp.status == HttpStatusCode.OK) { resp.bodyAsText() }
+    }
+    val parsed = capturedUrl ?: error("resource server was not called")
+    assert(parsed.parameters["updated-min"] == "2024-02-23T05:00:00Z") { parsed.toString() }
+    assert(parsed.parameters["updated-max"] == "2026-02-24T05:00:00Z") { parsed.toString() }
+    assert(parsed.parameters["published-min"] == null) { parsed.toString() }
+    assert(parsed.parameters["published-max"] == null) { parsed.toString() }
+  }
+
+  test("a utility quirk wins over the client's (diagnostic-only) dateFilterParam") {
+    var capturedUrl: io.ktor.http.Url? = null
+    runProxyUsage(
+      captureResourceRequest = { capturedUrl = it.url },
+      quirks = UtilityQuirks(dateFilterParam = "updated"),
+    ) { client, ctx ->
+      // Client asks for "published"; the utility quirk must still win.
+      val resp =
+        client.postProxyUsage(
+          ctx.proxyToken,
+          ctx.encryptedBlob,
+          publishedMin = Instant.parse("2024-02-23T05:00:00Z"),
+          dateFilterParam = "published",
+        )
+      assert(resp.status == HttpStatusCode.OK) { resp.bodyAsText() }
+    }
+    val parsed = capturedUrl ?: error("resource server was not called")
+    assert(parsed.parameters["updated-min"] == "2024-02-23T05:00:00Z") { parsed.toString() }
+    assert(parsed.parameters["published-min"] == null) { parsed.toString() }
+  }
+
   test("clamps a future published-max to now (custodians reject a future date with a 400)") {
     val farFuture = Instant.parse("2099-01-01T00:00:00Z")
     var capturedUrl: io.ktor.http.Url? = null
@@ -214,6 +266,7 @@ private suspend fun HttpClient.postProxyUsage(
   encryptedBlob: String,
   publishedMin: Instant? = null,
   publishedMax: Instant? = null,
+  dateFilterParam: String? = null,
 ): HttpResponse =
   post("/proxy/usage") {
     header(HttpHeaders.Authorization, "Bearer $presentedToken")
@@ -224,6 +277,7 @@ private suspend fun HttpClient.postProxyUsage(
           encryptedRefreshBlob = encryptedBlob,
           publishedMin = publishedMin,
           publishedMax = publishedMax,
+          dateFilterParam = dateFilterParam,
         ),
       ),
     )
@@ -236,6 +290,7 @@ private fun runProxyUsage(
   // Default matches the blob's refresh token, so happy-path tests see no rotation.
   refreshTokenInResponse: String = "rt_mock_value",
   captureResourceRequest: ((HttpRequestData) -> Unit)? = null,
+  quirks: UtilityQuirks = UtilityQuirks(),
   block: suspend (io.ktor.client.HttpClient, ProxyUsageCtx) -> Unit,
 ) {
   val subscriptionUri = "https://utility.mock/espi/1_1/resource/Batch/Subscription/42"
@@ -249,6 +304,7 @@ private fun runProxyUsage(
       clientSecret = Masked("client_secret_xyz"),
       defaultScope = "FB=1;IntervalDuration=900",
       tokenAuthStyle = TokenAuthStyle.HTTP_BASIC,
+      quirks = quirks,
     )
 
   val tokenResponseJson =
