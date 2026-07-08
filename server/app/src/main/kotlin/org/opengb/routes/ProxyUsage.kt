@@ -281,13 +281,18 @@ private suspend fun ApplicationCall.handleUpstreamAccepted(upstream: HttpRespons
 
 private suspend fun ApplicationCall.handleUpstreamFailure(upstream: HttpResponse) {
   val body = upstream.bodyAsText().take(MAX_UPSTREAM_ERROR_SNIPPET)
-  // Include the full URL we actually sent (including any published-min/max we appended) so
-  // a 4xx body that's empty or non-informative still tells the caller exactly what shape we
-  // asked for. Without this, debugging the test lab's strict timestamp parser is guesswork.
+  // Forward the DC's RAW response detail — status, headers, and body — so an upstream failure is
+  // diagnosable without a live reproduction. The full URL (including any date filter we appended)
+  // shows exactly what we asked for; the response headers carry the real signal when the body is
+  // empty (e.g. savagedata returns a bare 400, but an `x-response-time-ms`/`server` header proves
+  // the request reached their app rather than being bounced at the edge).
+  val responseHeaders =
+    upstream.headers.entries().joinToString(", ") { (name, values) -> "$name: ${values.joinToString(",")}" }
   respondError(
     HttpStatusCode.BadGateway,
     "utility_upstream_error",
-    "Resource server returned ${upstream.status.value} for ${upstream.call.request.url}: $body",
+    "Resource server returned ${upstream.status.value} for ${upstream.call.request.url} | " +
+      "response-headers: [$responseHeaders] | body: $body",
   )
 }
 
