@@ -136,6 +136,7 @@ fun main(args: Array<String>) {
         now,
         "published",
       )
+/*
       probe(
         usage,
         utility,
@@ -146,7 +147,17 @@ fun main(args: Array<String>) {
         now,
         "updated",
       )
-      probe(usage, utility, subscriptionUri, token.accessToken, "updated-min wide", now - WIDE_WINDOW, now, "updated")
+      probe(
+        usage,
+        utility,
+        subscriptionUri,
+        token.accessToken,
+        "updated-min wide",
+        now - WIDE_WINDOW,
+        now,
+        "updated",
+      )
+*/
     }
   }
 }

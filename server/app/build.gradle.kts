@@ -65,6 +65,10 @@ tasks.register<JavaExec>("onboardFetchAppInfo") {
   // Run from the git root so the driver's .env search finds open-green-button/.env. (rootProject
   // is server/, so its parent is the git root.)
   workingDir = rootProject.projectDir.parentFile
+  // Operator diagnostic that hits a live remote endpoint on every invocation — Gradle has no way
+  // to know that (it declares no outputs), so without this it can mark a rerun with identical
+  // --args UP-TO-DATE and silently skip actually executing. Always run.
+  outputs.upToDateWhen { false }
 }
 
 // Diagnostic: hit savagedata's usage resource DIRECTLY (bypassing the deployed proxy) to see the
@@ -77,6 +81,8 @@ tasks.register<JavaExec>("onboardFetchUsageDirect") {
   classpath = sourceSets["main"].runtimeClasspath
   mainClass.set("org.opengb.onboarding.FetchUsageDirectKt")
   workingDir = rootProject.projectDir.parentFile
+  // See onboardFetchAppInfo above: a live-network diagnostic must never be treated as cacheable.
+  outputs.upToDateWhen { false }
 }
 
 // Operator diagnostic: probe Burlington Hydro's resource server directly with published-min vs
@@ -88,6 +94,8 @@ tasks.register<JavaExec>("onboardProbeDateFilterParam") {
   classpath = sourceSets["main"].runtimeClasspath
   mainClass.set("org.opengb.onboarding.ProbeDateFilterParamKt")
   workingDir = rootProject.projectDir.parentFile
+  // See onboardFetchAppInfo above: a live-network diagnostic must never be treated as cacheable.
+  outputs.upToDateWhen { false }
 }
 
 // GraalVM native image — produces a self-contained binary for the scale-to-zero Fly.io
