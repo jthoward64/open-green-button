@@ -1,7 +1,9 @@
 package org.opengb.proxy
 
+import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.HttpStatement
 import io.ktor.http.HttpHeaders
 import io.ktor.http.URLBuilder
@@ -51,6 +53,25 @@ class UsageClient(private val clients: UtilityHttpClients) {
       }
     }
   }
+
+  /**
+   * Buffered GET of a *small* ESPI resource (e.g. the Authorization resource, whose
+   * `customerResourceURI` tells us where the customer-data batch lives). Unlike [fetch], this
+   * reads the whole body into memory — safe because these metadata resources are a few KB, not
+   * the multi-MB usage feeds [fetch] streams. Returns the raw [HttpResponse]; the caller inspects
+   * the status and reads `bodyAsText()`.
+   */
+  suspend fun getResource(
+    utility: UtilityProfile,
+    url: String,
+    accessToken: String,
+  ): HttpResponse =
+    clients.forUtility(utility).get(url) {
+      headers {
+        append(HttpHeaders.Authorization, "Bearer $accessToken")
+        append(HttpHeaders.Accept, "application/atom+xml, application/xml")
+      }
+    }
 
   // Whole-second precision, on purpose: Burlington's Green Button platform rejects a published-max
   // that carries sub-second precision with a bare 400, and the raw millis from currentTimeMillis()

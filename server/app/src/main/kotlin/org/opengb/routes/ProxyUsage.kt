@@ -53,6 +53,7 @@ fun Application.installProxyUsage(
 ) {
   routing {
     post("/proxy/usage") { handleProxyUsage(deps, usageClient) }
+    post("/proxy/customer") { handleProxyCustomer(deps, usageClient) }
   }
 }
 
@@ -77,42 +78,140 @@ data class ProxyUsageRequest(
 const val HEADER_NEW_ENCRYPTED_REFRESH_BLOB: String = "OpenGB-New-Encrypted-Refresh-Blob"
 const val HEADER_NEW_PROXY_TOKEN: String = "OpenGB-New-Proxy-Token"
 
-private suspend fun RoutingContext.handleProxyUsage(
+/** The utility + access token to fetch a resource with, plus the ESPI resource pointers other
+ *  resources (e.g. customer data) are located from. Produced by [prepareFetch]. */
+private data class RefreshedFetch(
+  val utility: UtilityProfile,
+  val subscriptionUri: String,
+  /** The ESPI Authorization resource URL captured at token exchange. GETting it yields the
+   *  `customerResourceURI` that points at the customer-data batch. Null for older blobs. */
+  val authorizationUri: String?,
+  val accessToken: String,
+)
+
+/**
+ * Shared prologue for the resource-proxy endpoints: authenticate the proxy token, refresh the
+ * utility access token, and emit the rotated-credentials headers. Returns the refreshed context, or
+ * null after already responding with the appropriate error.
+ */
+@Suppress("ReturnCount") // sequential guard clauses, each responding with its own error before bailing
+private suspend fun RoutingContext.prepareFetch(
   deps: AppDeps,
-  usageClient: UsageClient,
-) {
+  request: ProxyUsageRequest,
+): RefreshedFetch? {
   val presentedToken =
-    call.bearerToken() ?: return call.respondError(
-      HttpStatusCode.Unauthorized,
-      "missing_bearer_token",
-    )
-  val request = call.parseRequest() ?: return
-  val blob = call.decryptBlob(deps.crypto, request.encryptedRefreshBlob) ?: return
+    call.bearerToken() ?: run {
+      call.respondError(HttpStatusCode.Unauthorized, "missing_bearer_token")
+      return null
+    }
+  val blob = call.decryptBlob(deps.crypto, request.encryptedRefreshBlob) ?: return null
   if (!deps.crypto.verifyProxyToken(blob, presentedToken)) {
-    return call.respondError(HttpStatusCode.Unauthorized, "invalid_credentials")
+    call.respondError(HttpStatusCode.Unauthorized, "invalid_credentials")
+    return null
   }
-  val utility = call.resolveUtility(deps.registry, blob.utilityId) ?: return
+  val utility = call.resolveUtility(deps.registry, blob.utilityId) ?: return null
   val subscriptionUri = blob.subscriptionUri
   if (subscriptionUri.isNullOrBlank()) {
-    return call.respondError(HttpStatusCode.BadRequest, "no_subscription_uri")
+    call.respondError(HttpStatusCode.BadRequest, "no_subscription_uri")
+    return null
   }
 
-  val refreshed = call.refreshAccessToken(deps, utility, blob.refreshToken) ?: return
+  val refreshed = call.refreshAccessToken(deps, utility, blob.refreshToken) ?: return null
 
-  // The refresh above may have redeemed a ONE-TIME refresh token (e.g. OpenIddict, which savagedata
-  // runs), invalidating the blob the client still holds. Emit the rotated credentials NOW — before
-  // the resource fetch — so they reach the client on *every* outcome, including a fetch timeout or
-  // upstream error, not just the success path. Otherwise a post-refresh failure strands the client
-  // with a dead refresh token and forces a full re-authorization. (Headers set here are committed
-  // with whatever response we ultimately send, error or stream.)
+  // The refresh may have redeemed a ONE-TIME refresh token (savagedata/OpenIddict), invalidating the
+  // blob the client holds. Emit the rotated credentials NOW — before the resource fetch — so they
+  // reach the client on *every* outcome, not just success; otherwise a post-refresh failure strands
+  // the client with a dead refresh token. (Headers set here commit with whatever response we send.)
   val newCredentials = rotatedCredentials(deps.crypto, blob, refreshed.refreshToken)
   newCredentials?.let {
     call.response.header(HEADER_NEW_ENCRYPTED_REFRESH_BLOB, it.encryptedRefreshBlob)
     call.response.header(HEADER_NEW_PROXY_TOKEN, it.proxyToken)
   }
-
-  call.streamUsage(usageClient, utility, subscriptionUri, refreshed.accessToken, request)
+  return RefreshedFetch(utility, subscriptionUri, blob.authorizationUri, refreshed.accessToken)
 }
+
+private suspend fun RoutingContext.handleProxyUsage(
+  deps: AppDeps,
+  usageClient: UsageClient,
+) {
+  val request = call.parseRequest() ?: return
+  val fetch = prepareFetch(deps, request) ?: return
+  call.streamResource(usageClient, fetch.utility, fetch.subscriptionUri, fetch.accessToken, request)
+}
+
+private suspend fun RoutingContext.handleProxyCustomer(
+  deps: AppDeps,
+  usageClient: UsageClient,
+) {
+  val request = call.parseRequest() ?: return
+  val fetch = prepareFetch(deps, request) ?: return
+  val customerUri =
+    resolveCustomerUri(usageClient, fetch) ?: return call.respondError(
+      HttpStatusCode.BadRequest,
+      "no_customer_uri",
+      "the ESPI Authorization resource advertised no customerResourceURI and no customer URL " +
+        "could be derived from ${fetch.subscriptionUri}",
+    )
+  // Customer data is a snapshot resource — the ESPI date-range filters don't apply, so strip them.
+  call.streamResource(
+    usageClient,
+    fetch.utility,
+    customerUri,
+    fetch.accessToken,
+    request.copy(publishedMin = null, publishedMax = null, dateFilterParam = null),
+  )
+}
+
+/**
+ * Locate the customer-data resource for this authorization.
+ *
+ * The spec-defined source is the ESPI **Authorization resource** (whose URL we captured at token
+ * exchange): it advertises a `<customerResourceURI>` alongside the usage `<resourceURI>`. We GET it
+ * and read that field — vendor-agnostic, no URL guessing. Only if the custodian doesn't populate
+ * `customerResourceURI` (non-conformant) do we fall back to deriving the URL from the subscription
+ * URI by swapping the ESPI batch segment.
+ */
+private suspend fun resolveCustomerUri(
+  client: UsageClient,
+  fetch: RefreshedFetch,
+): String? {
+  val advertised =
+    fetch.authorizationUri?.let { authUri ->
+      runCatching {
+        val response = client.getResource(fetch.utility, authUri, fetch.accessToken)
+        if (response.status == HttpStatusCode.OK) {
+          extractCustomerResourceUri(response.bodyAsText())
+        } else {
+          null
+        }
+      }.getOrNull()
+    }
+  return advertised ?: customerUriFrom(fetch.subscriptionUri)
+}
+
+// Namespace-prefix-agnostic extraction of the ESPI Authorization resource's <customerResourceURI>.
+// The Authorization resource is a few KB, so a regex over its text avoids pulling an XML parser into
+// the otherwise parse-free proxy.
+private val CUSTOMER_RESOURCE_URI_REGEX =
+  Regex("""<(?:\w+:)?customerResourceURI>\s*([^<]+?)\s*</(?:\w+:)?customerResourceURI>""")
+
+private fun extractCustomerResourceUri(authorizationXml: String): String? =
+  CUSTOMER_RESOURCE_URI_REGEX
+    .find(authorizationXml)
+    ?.groupValues
+    ?.get(1)
+    ?.trim()
+    ?.takeIf { it.isNotBlank() }
+
+private const val BATCH_SUBSCRIPTION_SEGMENT = "/Batch/Subscription/"
+private const val BATCH_RETAIL_CUSTOMER_SEGMENT = "/Batch/RetailCustomer/"
+
+private fun customerUriFrom(subscriptionUri: String): String? =
+  if (subscriptionUri.contains(BATCH_SUBSCRIPTION_SEGMENT)) {
+    subscriptionUri.replace(BATCH_SUBSCRIPTION_SEGMENT, BATCH_RETAIL_CUSTOMER_SEGMENT)
+  } else {
+    null
+  }
 
 private fun ApplicationCall.bearerToken(): String? {
   val header = request.headers["Authorization"]?.trim() ?: return null
@@ -193,7 +292,7 @@ private fun rotatedCredentials(
 }
 
 @Suppress("TooGenericExceptionCaught")
-private suspend fun ApplicationCall.streamUsage(
+private suspend fun ApplicationCall.streamResource(
   client: UsageClient,
   utility: UtilityProfile,
   subscriptionUri: String,
