@@ -67,6 +67,18 @@ tasks.register<JavaExec>("onboardFetchAppInfo") {
   workingDir = rootProject.projectDir.parentFile
 }
 
+// Diagnostic: hit savagedata's usage resource DIRECTLY (bypassing the deployed proxy) to see the
+// raw response for a CMD usage request. Reuses the prod crypto/OAuth/fetch code paths. Reads the
+// gitignored .env for OPENGB_CRYPTO_AESKEYBASE64 + OPENGB_UTILITY_MILTON_HYDRO_CLIENTSECRET.
+//   ./gradlew :app:onboardFetchUsageDirect --args="<claimCode> [dateFilterParam]"
+tasks.register<JavaExec>("onboardFetchUsageDirect") {
+  group = "onboarding"
+  description = "Directly GET a utility's usage resource for a redeemed claim (args: <claimCode> [dateFilterParam])."
+  classpath = sourceSets["main"].runtimeClasspath
+  mainClass.set("org.opengb.onboarding.FetchUsageDirectKt")
+  workingDir = rootProject.projectDir.parentFile
+}
+
 // GraalVM native image — produces a self-contained binary for the scale-to-zero Fly.io
 // deployment (see ../../Dockerfile and docs/deployment.md). CIO is the only Ktor engine that
 // works under native-image; see bootable/CioKtorService.kt for why we committed to it. The

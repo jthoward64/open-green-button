@@ -32,11 +32,16 @@ class UsageClient(private val clients: UtilityHttpClients) {
     // Base name of the ESPI date-range query params (`published` → published-min/published-max).
     // Overridable per request for diagnosing a non-conforming custodian (e.g. `updated`).
     val base = dateFilterParam?.takeIf { it.isNotBlank() } ?: "published"
+    // ESPI expects ISO 8601 (Instant.toString(), e.g. 2026-06-08T00:00:00Z) for these params.
+    // Clamp published-max to now: no utility publishes future-dated readings, and savagedata
+    // rejects a future published-max with a bare 400 (the Home Assistant client sends now + a
+    // 1-day lookahead margin, which is what tripped this).
+    val effectiveMax = publishedMax?.let { minOf(it, nowInstant()) }
     val url =
       URLBuilder(subscriptionUri)
         .apply {
-          publishedMin?.let { parameters.append("$base-min", formatPublished(it, utility)) }
-          publishedMax?.let { parameters.append("$base-max", formatPublished(it, utility)) }
+          publishedMin?.let { parameters.append("$base-min", it.toString()) }
+          effectiveMax?.let { parameters.append("$base-max", it.toString()) }
         }.buildString()
 
     return clients.forUtility(utility).prepareGet(url) {
@@ -47,10 +52,5 @@ class UsageClient(private val clients: UtilityHttpClients) {
     }
   }
 
-  // ESPI published-min/max are Unix epoch seconds per the NAESB standard (our default); the Green
-  // Button test-lab platform (which Burlington runs on) instead requires ISO 8601. Pick per-utility.
-  private fun formatPublished(
-    instant: Instant,
-    utility: UtilityProfile,
-  ): String = if (utility.quirks.iso8601PublishedParams) instant.toString() else instant.epochSeconds.toString()
+  private fun nowInstant(): Instant = Instant.fromEpochMilliseconds(System.currentTimeMillis())
 }

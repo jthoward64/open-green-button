@@ -3,7 +3,6 @@ package org.opengb.routes
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.discardRemaining
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -14,11 +13,9 @@ import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import io.ktor.utils.io.copyTo
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import org.opengb.AppDeps
@@ -203,63 +200,47 @@ private suspend fun ApplicationCall.streamUsage(
   accessToken: String,
   request: ProxyUsageRequest,
 ) {
-  // `execute()` (no block variant) returns an HttpResponse we own — its body channel stays
-  // open until *we* cancel it, not when an enclosing block returns. That's the lifecycle
-  // shape `respondBytesWriter` needs: it commits headers and runs its producer (which reads
-  // from upstream) as part of the engine's body-writing phase, which can run after this
-  // function's syntactic body has handed control back to Ktor. With the `execute { block }`
-  // form, the block returns before body writing finishes and upstream gets torn down mid-
-  // copy → ClosedByteChannelException.
-  val upstream: HttpResponse =
-    try {
-      client
-        .fetch(
-          utility = utility,
-          subscriptionUri = subscriptionUri,
-          accessToken = accessToken,
-          publishedMin = request.publishedMin,
-          publishedMax = request.publishedMax,
-          dateFilterParam = request.dateFilterParam,
-        ).execute()
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      // Timeout / connection reset / TLS error reaching the resource server, before we have any
-      // response. Report a retryable upstream error — crucially, the rotated-credentials headers
-      // set by the caller are already on this response, so the client keeps its refreshed token
-      // and can retry rather than being forced to re-authorize.
-      respondError(
-        HttpStatusCode.BadGateway,
-        "utility_upstream_error",
-        "Resource fetch failed for $subscriptionUri: ${e.message}",
-      )
-      return
-    }
+  // TRUE zero-copy streaming: run the whole response inside the client's `execute { }` block (so the
+  // upstream body channel is never buffered), and respond with a pull-based [ByteReadChannelContent].
+  // The engine consumes that channel *as part of* `respond(...)`, so the copy finishes before the
+  // block returns — the upstream stays alive throughout, and memory is O(engine buffer), not O(feed).
+  // (The no-block `execute()` reads the whole body into memory → OOM on a multi-MB ESPI feed;
+  // `respondBytesWriter` defers its producer until after the block returns → ClosedByteChannelException.)
+  var responseStarted = false
   try {
-    if (upstream.status == HttpStatusCode.Accepted) {
-      handleUpstreamAccepted(upstream)
-      return
-    }
-    if (upstream.status != HttpStatusCode.OK) {
-      handleUpstreamFailure(upstream)
-      return
-    }
-    val upstreamContentType =
-      upstream.headers[HttpHeaders.ContentType]?.let { ContentType.parse(it) }
-        ?: ESPI_ATOM_XML
-
-    // True zero-buffer streaming. respondBytesWriter suspends until its producer block
-    // completes, and copyTo only returns when upstream EOFs. Combined with the explicit
-    // `execute()` (no auto-close) above, the upstream channel is alive throughout the copy.
-    respondBytesWriter(upstreamContentType) {
-      upstream.bodyAsChannel().copyTo(this)
-    }
-  } finally {
-    // Explicitly release the upstream — `discardRemaining` reads and drops any unread bytes
-    // (none in the happy path; only the 4xx/5xx error-body snippet path leaves anything),
-    // returning the connection to the client's pool. Without it the HTTP/2 stream slot
-    // leaks and a busy server eventually starves on the client connection pool.
-    runCatching { upstream.discardRemaining() }
+    client
+      .fetch(
+        utility = utility,
+        subscriptionUri = subscriptionUri,
+        accessToken = accessToken,
+        publishedMin = request.publishedMin,
+        publishedMax = request.publishedMax,
+        dateFilterParam = request.dateFilterParam,
+      ).execute { upstream ->
+        when {
+          upstream.status == HttpStatusCode.Accepted -> handleUpstreamAccepted(upstream)
+          upstream.status != HttpStatusCode.OK -> handleUpstreamFailure(upstream)
+          else -> {
+            val upstreamContentType =
+              upstream.headers[HttpHeaders.ContentType]?.let { ContentType.parse(it) } ?: ESPI_ATOM_XML
+            responseStarted = true
+            respond(ByteReadChannelContent(upstream.bodyAsChannel(), upstreamContentType))
+          }
+        }
+      }
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    // A failure BEFORE we started responding (timeout / connection reset / TLS) is a clean, retryable
+    // upstream error — the rotated-credentials headers set by the caller ride along, so the client
+    // keeps its refreshed token. Once streaming has begun the headers are committed, so we can't send
+    // an error body; let the exception surface as a truncated stream.
+    if (responseStarted) throw e
+    respondError(
+      HttpStatusCode.BadGateway,
+      "utility_upstream_error",
+      "Resource fetch failed for $subscriptionUri: ${e.message}",
+    )
   }
 }
 
