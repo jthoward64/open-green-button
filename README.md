@@ -6,17 +6,17 @@ The hosted server is a **stateless OAuth proxy**: utilities require a stable pub
 
 ## Status
 
-🚧 **Live!** Burlington Hydro (Ontario, Canada).
-🚧 **Registration in progress** Elk Energy (Ontario, Canada).
-🚧 **Registration in progress** Enwin (Ontario, Canada).
-🚧 **Registration in progress** Festival Hydro (Ontario, Canada).
-🚧 **Registration in progress** London Hydro (Ontario, Canada).
-🚧 **Registration in progress** Milton Hydro (Ontario, Canada).
-🚧 **Registration in progress** Newmarket-Tay (NT) Power (Ontario, Canada).
-🚧 **Registration in progress** Niagara Peninsula Energy (Ontario, Canada).
-🚧 **Registration in progress** Oakville Hydro (Ontario, Canada).
-🚧 **Registration in progress** Oshawa Power (Ontario, Canada).
-🚧 **Registration in progress** Pacific Gas & Electric (California).
+* 🚧 **Live!** Burlington Hydro (Ontario, Canada).
+* 🚧 **Registration in progress** Elk Energy (Ontario, Canada).
+* 🚧 **Registration in progress** Enwin (Ontario, Canada).
+* 🚧 **Registration in progress** Festival Hydro (Ontario, Canada).
+* 🚧 **Registration in progress** London Hydro (Ontario, Canada).
+* 🚧 **Registration in progress** Milton Hydro (Ontario, Canada).
+* 🚧 **Registration in progress** Newmarket-Tay (NT) Power (Ontario, Canada).
+* 🚧 **Registration in progress** Niagara Peninsula Energy (Ontario, Canada).
+* 🚧 **Registration in progress** Oakville Hydro (Ontario, Canada).
+* 🚧 **Registration in progress** Oshawa Power (Ontario, Canada).
+* 🚧 **Registration in progress** Pacific Gas & Electric (California).
 
 ### New Utility Support
 
