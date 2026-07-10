@@ -98,7 +98,8 @@ val ProxyUsageTest by testSuite {
       refreshTokenInResponse = "rt_rotated_value",
     ) { client, ctx ->
       val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
-      assert(resp.status == HttpStatusCode.BadGateway) { resp.bodyAsText() }
+      // 500 from the resource server is now propagated verbatim (transient; client retries).
+      assert(resp.status == HttpStatusCode.InternalServerError) { resp.bodyAsText() }
       assert(resp.bodyAsText().contains("utility_upstream_error")) { resp.bodyAsText() }
       val rotatedBlob =
         resp.headers[HEADER_NEW_ENCRYPTED_REFRESH_BLOB]
@@ -126,11 +127,39 @@ val ProxyUsageTest by testSuite {
     }
   }
 
-  test("502 utility_upstream_error when the resource server returns 500") {
+  test("propagates the resource server's 5xx status verbatim (transient — client retries)") {
     runProxyUsage(resourceStatus = HttpStatusCode.InternalServerError) { client, ctx ->
       val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
-      assert(resp.status == HttpStatusCode.BadGateway) { resp.bodyAsText() }
+      // Was collapsed to 502; now propagated so the client sees the real upstream status. Still a
+      // 5xx, so the client's retry semantics are unchanged.
+      assert(resp.status == HttpStatusCode.InternalServerError) { resp.bodyAsText() }
       assert(resp.bodyAsText().contains("utility_upstream_error"))
+    }
+  }
+
+  test("propagates ANY real upstream status verbatim — never synthesizes 502 for a non-error status") {
+    // Regression guard against re-introducing a "only propagate 4xx/5xx, else 502" range check.
+    // The proxy must not second-guess a real upstream response: 502 is reserved for "couldn't get
+    // a response at all" (the catch block). 201 is outside the old 400..599 range (and has no
+    // redirect semantics that would confuse the test client), so it proves the guard is gone.
+    runProxyUsage(resourceStatus = HttpStatusCode.Created) { client, ctx ->
+      val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
+      assert(resp.status == HttpStatusCode.Created) { resp.bodyAsText() }
+      assert(resp.status != HttpStatusCode.BadGateway) { resp.bodyAsText() }
+    }
+  }
+
+  test("propagates a resource-server 4xx verbatim so the client won't retry a permanent failure") {
+    // The real case: Burlington returns 403 access_denied for a resource our OAuth scope doesn't
+    // cover (e.g. customer data). Collapsing that to 502 made the client loop forever; propagating
+    // the 403 lets it recognize a permanent failure and stop. 502 is reserved for a genuine gateway
+    // failure (no response from upstream), not a valid 403.
+    runProxyUsage(resourceStatus = HttpStatusCode.Forbidden) { client, ctx ->
+      val resp = client.postProxyUsage(ctx.proxyToken, ctx.encryptedBlob)
+      assert(resp.status == HttpStatusCode.Forbidden) { resp.bodyAsText() }
+      assert(resp.bodyAsText().contains("utility_upstream_error")) { resp.bodyAsText() }
+      // The upstream status is still spelled out in the detail message for diagnostics.
+      assert(resp.bodyAsText().contains("returned 403")) { resp.bodyAsText() }
     }
   }
 

@@ -373,8 +373,15 @@ private suspend fun ApplicationCall.handleUpstreamFailure(upstream: HttpResponse
   // the request reached their app rather than being bounced at the edge).
   val responseHeaders =
     upstream.headers.entries().joinToString(", ") { (name, values) -> "$name: ${values.joinToString(",")}" }
+  // PROPAGATE the resource server's own status VERBATIM. If upstream gave us a real HTTP response
+  // it is not a gateway failure — it's data the client is entitled to act on with standard HTTP
+  // semantics (4xx = permanent, don't retry — e.g. Burlington's 403 access_denied; 5xx = transient,
+  // retry). We used to collapse everything to 502, which hid that and made the client loop forever
+  // on permanent failures. 502 Bad Gateway now means ONLY what it says — we couldn't get a valid
+  // response from upstream at all (connection/timeout/TLS) — and is emitted solely from
+  // streamResource's catch block, never here.
   respondError(
-    HttpStatusCode.BadGateway,
+    upstream.status,
     "utility_upstream_error",
     "Resource server returned ${upstream.status.value} for ${upstream.call.request.url} | " +
       "response-headers: [$responseHeaders] | body: $body",
