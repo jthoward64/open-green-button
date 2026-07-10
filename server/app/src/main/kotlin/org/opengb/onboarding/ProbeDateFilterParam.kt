@@ -75,10 +75,7 @@ private const val BURLINGTON_SCOPE =
 // A throwaway HMAC pepper: TokenCrypto validates its length but decrypt() never uses it.
 private const val DUMMY_PEPPER_B64 = "AAAAAAAAAAAAAAAAAAAAAA=="
 
-// ~2 years, matching Burlington's configured initialHistory — kotlin.time has no `.years`
-// extension, so this is spelled out in days.
-private val WIDE_WINDOW = 730.days
-private val NARROW_WINDOW = 4.days
+private val WINDOW = 4.days
 
 fun main(args: Array<String>) {
   val encryptedBlob =
@@ -114,25 +111,14 @@ fun main(args: Array<String>) {
       println("access_token (masked) = ${mask(token.accessToken)}")
       println()
 
-      // 3) the three probes that settle both open questions:
-      //   - published-min narrow: expected ~0 IntervalReadings (matches every real HA poll so far)
-      //   - updated-min narrow:   does it ACTUALLY scope to the narrow window, or return everything?
-      //   - updated-min wide:     if narrow ≈ wide, updated-min isn't filtering at all — it always
-      //                           returns full history regardless of the requested window.
-      // Whole-second precision, on purpose: Burlington's platform 400s a timestamp that
-      // carries sub-second precision (confirmed 2026-07-08 against this exact endpoint —
-      // Clock.System.now() carries nanoseconds, which leaked straight into published-min
-      // untouched, and into published-max whenever it was already <= the fresh server-side
-      // clamp instant, defeating UsageClient.fetch()'s own now-clamp). HA's client (_to_iso_z)
-      // already truncates to whole seconds for every real request — this matches that.
       val now = Instant.fromEpochSeconds(Clock.System.now().epochSeconds)
       probe(
         usage,
         utility,
         subscriptionUri,
         token.accessToken,
-        "published-min narrow",
-        now - NARROW_WINDOW,
+        "published",
+        now - WINDOW,
         now,
         "published",
       )
@@ -142,18 +128,8 @@ fun main(args: Array<String>) {
         utility,
         subscriptionUri,
         token.accessToken,
-        "updated-min narrow",
-        now - NARROW_WINDOW,
-        now,
         "updated",
-      )
-      probe(
-        usage,
-        utility,
-        subscriptionUri,
-        token.accessToken,
-        "updated-min wide",
-        now - WIDE_WINDOW,
+        now - WINDOW,
         now,
         "updated",
       )
